@@ -1,0 +1,84 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* -------------------------------------------------------------------------
+   Design Tokens — CSS Custom Properties
+   Referenced by tailwind.config.ts colors + any custom components/charts
+   ------------------------------------------------------------------------- */
+:root {
+  /* Colors — light mode */
+  --background: 220 20% 97%;
+  --foreground: 224 71% 4%;
+
+  --card: 0 0% 100%;
+  --card-foreground: 224 71% 4%;
+
+  --primary: 250 84% 58%;          /* Indigo-violet */
+  --primary-foreground: 0 0% 100%;
+
+  --secondary: 210 40% 96%;
+  --secondary-foreground: 222 47% 11%;
+
+  --muted: 210 40% 96%;
+  --muted-foreground: 215 16% 47%;
+
+  --border: 214 32% 91%;
+
+  --radius: 0.625rem;
+
+  /* Chart palette — use these in Recharts components */
+  --chart-1: 250 84% 58%;
+  --chart-2: 142 71% 45%;
+  --chart-3: 38 92% 50%;
+  --chart-4: 0 72% 51%;
+  --chart-5: 199 89% 48%;
+}
+
+.dark {
+  --background: 224 71% 4%;
+  --foreground: 213 31% 91%;
+
+  --card: 222 47% 8%;
+  --card-foreground: 213 31% 91%;
+
+  --primary: 250 84% 65%;
+  --primary-foreground: 0 0% 100%;
+
+  --secondary: 222 47% 12%;
+  --secondary-foreground: 213 31% 91%;
+
+  --muted: 222 47% 12%;
+  --muted-foreground: 215 20% 65%;
+
+  --border: 222 47% 16%;
+}
+
+/* -------------------------------------------------------------------------
+   Base styles
+   ------------------------------------------------------------------------- */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  min-height: 100vh;
+}
+
+/* Focus ring — WCAG 2.1 AA */
+*:focus-visible {
+  outline: 2px solid hsl(var(--primary));
+  outline-offset: 2px;
+}
