@@ -1,42 +1,73 @@
-/**
- * Resume types — mirrors backend Pydantic schemas.
- * Filled out fully in Phase 1.
- */
+"""
+resume.ts — Shared TypeScript interfaces matching backend Pydantic schemas.
+"""
 
-export interface Resume {
-  id: string;
-  userId: string;
-  fileUrl: string;
-  rawText?: string | null;
-  parsedJson?: Record<string, unknown> | null;
-  atsScore?: number | null;
-  createdAt: string;
-  updatedAt: string;
+export interface ResumeUploadResponse {
+  resume_id: string;
+  file_url: string;
+  created_at: string;
+  job_id?: string;
+  message: string;
 }
 
-export interface JobDescription {
+export interface ResumeResponse {
   id: string;
-  userId: string;
-  resumeId?: string | null;
-  rawText: string;
-  parsedKeywords?: Record<string, unknown> | null;
-  createdAt: string;
+  user_id: string;
+  file_url: string;
+  raw_text?: string | null;
+  parsed_json?: Record<string, any> | null;
+  ats_score?: number | null;
+  created_at: string;
+  updated_at: string;
 }
 
-export interface ResumeReport {
-  id: string;
-  resumeId: string;
-  jobDescriptionId?: string | null;
-  atsBreakdown?: Record<string, unknown> | null;
-  grammarSuggestions?: unknown[] | null;
-  keywordGaps?: unknown[] | null;
-  actionItems?: unknown[] | null;
-  createdAt: string;
+export interface JobStatusResponse {
+  job_id: string;
+  status: "queued" | "in_progress" | "complete" | "failed";
+  result?: Record<string, any> | null;
 }
 
-export type JobStatus = "pending" | "processing" | "complete" | "failed";
+export interface ScoreResumeResponse {
+  resume_id: string;
+  job_id: string;
+  message: string;
+}
 
-export interface AsyncJobResponse {
-  jobId: string;
-  status: JobStatus;
+export interface AtsBreakdown {
+  overall_score: number;
+  formatting: number;
+  structure: number;
+  parseability: number;
+  feedback?: string[];
+}
+
+export interface GrammarSuggestion {
+  location: string;
+  issue: string;
+  suggestion: string;
+}
+
+export interface KeywordGap {
+  keyword: string;
+  importance: "high" | "medium" | "low";
+  category?: string;
+  reason?: string;
+}
+
+export interface ActionItem {
+  priority: number;
+  section?: string;
+  action: string;
+  impact?: string;
+}
+
+export interface ResumeReportResponse {
+  id: string;
+  resume_id: string;
+  job_description_id?: string | null;
+  ats_breakdown?: AtsBreakdown | null;
+  grammar_suggestions?: GrammarSuggestion[] | null;
+  keyword_gaps?: KeywordGap[] | null;
+  action_items?: ActionItem[] | null;
+  created_at: string;
 }

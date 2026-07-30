@@ -1,5 +1,367 @@
 """
 resume_service.py — Resume business logic (Phase 1).
-Handles: file upload → Cloudinary, save resumes row, orchestrate parse/score jobs.
+
+Handles:
+  - File extension & MIME type validation (PDF, DOCX)
+  - Uploading file to Cloudinary storage
+  - Text extraction from uploaded PDF / DOCX files (pypdf, python-docx)
+  - Database row creation and updates in `resumes` table
+  - ATS scoring, grammar auditing, and `resume_reports` row creation
+  - Target Job Description creation and keyword gap analysis
+  - Fetching resume records and report details by ID for authorized users
 """
-# TODO: implement in Phase 1
+
+import io
+from typing import Optional
+from uuid import UUID
+
+import cloudinary
+import cloudinary.uploader
+import httpx
+from fastapi import HTTPException, UploadFile, status
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.config import settings
+from app.models.resume import JobDescription, Resume, ResumeReport
+from app.services import llm_service
+
+# Allowed file extensions and MIME types
+ALLOWED_EXTENSIONS = {".pdf", ".docx", ".doc"}
+ALLOWED_CONTENT_TYPES = {
+    "application/pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/msword",
+    "application/octet-stream",  # Fallback for some browsers uploading docx
+}
+
+
+def _configure_cloudinary() -> None:
+    """Configures the Cloudinary SDK with environment settings."""
+    cloudinary.config(
+        cloud_name=settings.cloudinary_cloud_name,
+        api_key=settings.cloudinary_api_key,
+        api_secret=settings.cloudinary_api_secret,
+        secure=True,
+    )
+
+
+def validate_resume_file(file: UploadFile) -> None:
+    """
+    Validates that the uploaded file has a valid PDF or DOCX extension and MIME type.
+    Raises HTTPException(400) if validation fails.
+    """
+    filename = file.filename or ""
+    ext = "." + filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid file extension '{ext}'. Only PDF (.pdf) and Word (.docx) files are allowed.",
+        )
+
+    if file.content_type and file.content_type not in ALLOWED_CONTENT_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid file content type '{file.content_type}'. Only PDF and Word documents are accepted.",
+        )
+
+
+def extract_text_from_bytes(file_bytes: bytes, filename: str) -> str:
+    """
+    Extracts raw text from PDF or DOCX file bytes.
+    Uses `pypdf` for PDFs and `python-docx` for Word documents.
+    Imports are lazy to avoid server startup errors if dependencies are missing.
+    """
+    ext = "." + filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    text_chunks: list[str] = []
+
+    if ext == ".pdf":
+        try:
+            import pypdf
+            reader = pypdf.PdfReader(io.BytesIO(file_bytes))
+            for page in reader.pages:
+                extracted = page.extract_text()
+                if extracted:
+                    text_chunks.append(extracted)
+        except ImportError:
+            raise ValueError("pypdf package is not installed. Please run 'pip install pypdf'.")
+        except Exception as exc:
+            raise ValueError(f"Failed to extract text from PDF: {exc}") from exc
+    elif ext in (".docx", ".doc"):
+        try:
+            import docx
+            doc = docx.Document(io.BytesIO(file_bytes))
+            for paragraph in doc.paragraphs:
+                if paragraph.text.strip():
+                    text_chunks.append(paragraph.text.strip())
+            for table in doc.tables:
+                for row in table.rows:
+                    row_text = [cell.text.strip() for cell in row.cells if cell.text.strip()]
+                    if row_text:
+                        text_chunks.append(" | ".join(row_text))
+        except ImportError:
+            raise ValueError("python-docx package is not installed. Please run 'pip install python-docx'.")
+        except Exception as exc:
+            raise ValueError(f"Failed to extract text from DOCX: {exc}") from exc
+    else:
+        # Fallback text decoding
+        return file_bytes.decode("utf-8", errors="ignore")
+
+    return "\n\n".join(text_chunks).strip()
+
+
+async def extract_text_from_url(file_url: str) -> str:
+    """
+    Downloads file bytes from a Cloudinary URL and extracts raw text.
+    """
+    async with httpx.AsyncClient() as client:
+        response = await client.get(file_url, follow_redirects=True, timeout=30.0)
+        response.raise_for_status()
+
+    filename = file_url.split("?")[0].split("/")[-1]
+    return extract_text_from_bytes(response.content, filename)
+
+
+async def upload_resume_file(
+    file: UploadFile,
+    user_id: UUID,
+    db: AsyncSession,
+) -> Resume:
+    """
+    Validates the file, uploads it to Cloudinary, and saves a `resumes` record in the database.
+    """
+    # 1. Validate file extension and format
+    validate_resume_file(file)
+
+    # 2. Upload to Cloudinary
+    _configure_cloudinary()
+    try:
+        await file.seek(0)
+        file_bytes = await file.read()
+
+        upload_result = cloudinary.uploader.upload(
+            file_bytes,
+            resource_type="raw",
+            folder="resumes",
+            public_id=f"user_{user_id}_{file.filename}",
+            overwrite=True,
+        )
+        file_url = upload_result.get("secure_url") or upload_result.get("url")
+        if not file_url:
+            raise ValueError("Cloudinary response did not return a valid file URL.")
+    except Exception as exc:
+        if "your_cloud_name" in settings.cloudinary_cloud_name or not settings.cloudinary_cloud_name:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Cloudinary is not configured. Please set valid Cloudinary credentials in .env.",
+            ) from exc
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to upload resume file to Cloudinary: {str(exc)}",
+        ) from exc
+
+    # 3. Create database row (raw_text, parsed_json, ats_score left null until parse_resume job runs)
+    resume = Resume(
+        user_id=user_id,
+        file_url=file_url,
+        raw_text=None,
+        parsed_json=None,
+        ats_score=None,
+    )
+    db.add(resume)
+    await db.commit()
+    await db.refresh(resume)
+
+    return resume
+
+
+async def get_resume_by_id(
+    db: AsyncSession,
+    resume_id: UUID,
+    user_id: Optional[UUID] = None,
+) -> Optional[Resume]:
+    """
+    Fetches a resume by ID (optionally matching user_id).
+    """
+    stmt = select(Resume).where(Resume.id == resume_id)
+    if user_id is not None:
+        stmt = stmt.where(Resume.user_id == user_id)
+    result = await db.execute(stmt)
+    return result.scalar_one_or_none()
+
+
+async def list_user_resumes(
+    db: AsyncSession,
+    user_id: UUID,
+) -> list[Resume]:
+    """
+    Fetches all Resume records owned by user_id, ordered by created_at descending.
+    """
+    stmt = select(Resume).where(Resume.user_id == user_id).order_by(Resume.created_at.desc())
+    result = await db.execute(stmt)
+    return list(result.scalars().all())
+
+
+async def create_resume_report(
+    db: AsyncSession,
+    resume: Resume,
+) -> ResumeReport:
+    """
+    Evaluates ATS score and performs grammar audit on a parsed resume.
+    Updates `resumes.ats_score` and inserts a `resume_reports` database row.
+    Leaves `keyword_gaps`, `action_items`, and `job_description_id` as null.
+    """
+    if not resume.parsed_json:
+        raise ValueError("Cannot score resume: parsed_json is null. Run parse_resume job first.")
+
+    raw_text = resume.raw_text or ""
+
+    # 1. Call LLM for ATS scoring
+    ats_data = await llm_service.score_resume_ats(
+        parsed_json=resume.parsed_json,
+        raw_text=raw_text,
+        user_id=resume.user_id,
+        db=db,
+    )
+
+    # 2. Call LLM for grammar audit
+    grammar_data = await llm_service.audit_resume_grammar(
+        raw_text=raw_text,
+        user_id=resume.user_id,
+        db=db,
+    )
+
+    # 3. Update overall ATS score on the resume record
+    overall_score = ats_data.get("overall_score", 70)
+    try:
+        resume.ats_score = int(overall_score)
+    except (ValueError, TypeError):
+        resume.ats_score = 70
+
+    # 4. Insert resume_reports row matching database.md schema
+    report = ResumeReport(
+        resume_id=resume.id,
+        job_description_id=None,
+        ats_breakdown=ats_data,
+        grammar_suggestions=grammar_data.get("suggestions", []),
+        keyword_gaps=None,
+        action_items=None,
+    )
+    db.add(report)
+    await db.commit()
+    await db.refresh(report)
+
+    return report
+
+
+async def get_latest_resume_report(
+    db: AsyncSession,
+    resume_id: UUID,
+    user_id: UUID,
+) -> Optional[ResumeReport]:
+    """
+    Fetches the most recent ResumeReport for a resume belonging to the authenticated user.
+    """
+    stmt = (
+        select(ResumeReport)
+        .join(Resume, Resume.id == ResumeReport.resume_id)
+        .where(ResumeReport.resume_id == resume_id, Resume.user_id == user_id)
+        .order_by(ResumeReport.created_at.desc())
+        .limit(1)
+    )
+    result = await db.execute(stmt)
+    return result.scalar_one_or_none()
+
+
+async def create_job_description(
+    db: AsyncSession,
+    user_id: UUID,
+    resume_id: UUID,
+    raw_text: str,
+) -> JobDescription:
+    """
+    Inserts a new target JobDescription record into Postgres linked to user_id and resume_id.
+    """
+    jd = JobDescription(
+        user_id=user_id,
+        resume_id=resume_id,
+        raw_text=raw_text,
+        parsed_keywords=None,
+    )
+    db.add(jd)
+    await db.commit()
+    await db.refresh(jd)
+    return jd
+
+
+async def get_job_description_by_id(
+    db: AsyncSession,
+    job_description_id: UUID,
+) -> Optional[JobDescription]:
+    """
+    Fetches a JobDescription by ID.
+    """
+    stmt = select(JobDescription).where(JobDescription.id == job_description_id)
+    result = await db.execute(stmt)
+    return result.scalar_one_or_none()
+
+
+async def analyze_resume_keywords(
+    db: AsyncSession,
+    job_description_id: UUID,
+    resume_id: UUID,
+) -> ResumeReport:
+    """
+    Compares a candidate's resume against a target job description:
+      1. Fetches resume and target job_description.
+      2. Fetches the resume's most recent prior `ResumeReport` row.
+         - Fails cleanly if no prior scoring report exists (must score resume first).
+      3. Calls Groq `analyze_keywords_llm` to extract matched keywords, missing keywords, and action items.
+      4. Updates `job_description.parsed_keywords`.
+      5. Creates a NEW `ResumeReport` row carrying forward `ats_breakdown` and `grammar_suggestions`
+         from the prior report, with `job_description_id`, `keyword_gaps`, and `action_items` populated.
+    """
+    resume = await get_resume_by_id(db, resume_id=resume_id)
+    if not resume:
+        raise ValueError(f"Resume {resume_id} not found.")
+
+    jd = await get_job_description_by_id(db, job_description_id=job_description_id)
+    if not jd:
+        raise ValueError(f"Job description {job_description_id} not found.")
+
+    # Fetch most recent prior ResumeReport to carry forward ats_breakdown and grammar_suggestions
+    prior_report = await get_latest_resume_report(db, resume_id=resume_id, user_id=resume.user_id)
+    if not prior_report:
+        raise ValueError(
+            f"Cannot analyze keywords for resume {resume_id}: no prior scoring report found. Run score_resume job first."
+        )
+
+    # Call LLM for keyword gap analysis
+    analysis_result = await llm_service.analyze_keywords_llm(
+        resume_text=resume.raw_text or "",
+        jd_text=jd.raw_text,
+        user_id=resume.user_id,
+        db=db,
+    )
+
+    # Save parsed keywords summary to JobDescription
+    jd.parsed_keywords = {
+        "matched": analysis_result.get("matched_keywords", []),
+        "missing": analysis_result.get("missing_keywords", []),
+    }
+
+    # DATA MODELING DECISION: Create a NEW ResumeReport row carrying forward prior ATS/grammar data
+    new_report = ResumeReport(
+        resume_id=resume.id,
+        job_description_id=jd.id,
+        ats_breakdown=prior_report.ats_breakdown,
+        grammar_suggestions=prior_report.grammar_suggestions,
+        keyword_gaps=analysis_result.get("missing_keywords", []),
+        action_items=analysis_result.get("action_items", []),
+    )
+    db.add(new_report)
+    await db.commit()
+    await db.refresh(new_report)
+
+    return new_report

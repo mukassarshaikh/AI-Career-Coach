@@ -42,12 +42,19 @@ Everything in this stack is free-tier / open-source — no paid services require
 5. Run DB migrations:
    ```bash
    cd backend
-   alembic upgrade head
+   python -m alembic upgrade head
    ```
-6. Start the Arq worker (for async resume scoring / roadmap jobs):
+6. Seed Market Skill Reference Data:
    ```bash
    cd backend
-   arq app.workers.WorkerSettings
+   python -m app.db.seeds.market_skill_reference_seed
+   ```
+   > **Note on Model Download**: Running the seed script or generating skill vectors for the first time will cause `sentence-transformers` to download the `all-MiniLM-L6-v2` embedding model (~80MB) from Hugging Face. This requires outbound internet access on first run and may take a moment; it is a one-time download and is cached locally afterward.
+
+7. Start the Arq worker (for async jobs):
+   ```bash
+   cd backend
+   python -m arq app.workers.worker_settings.WorkerSettings
    ```
 
 ## Build Phases

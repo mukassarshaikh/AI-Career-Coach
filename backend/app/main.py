@@ -9,8 +9,11 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.core.config import settings
+from app.api.v1 import auth as auth_router
 from app.api.v1 import health as health_router
+from app.api.v1 import resume as resume_router
+from app.api.v1 import skill as skill_router
+from app.core.config import settings
 
 
 @asynccontextmanager
@@ -45,13 +48,9 @@ app.add_middleware(
 # Routers
 # ---------------------------------------------------------------------------
 app.include_router(health_router.router, prefix="/api/v1")
-
-# Phase 1+ routers (registered here when implemented):
-# app.include_router(resume_router.router, prefix="/api/v1")
-# app.include_router(skill_router.router, prefix="/api/v1")
-# app.include_router(learning_router.router, prefix="/api/v1")
-# app.include_router(career_router.router, prefix="/api/v1")
-# app.include_router(dashboard_router.router, prefix="/api/v1")
+app.include_router(auth_router.router, prefix="/api/v1")
+app.include_router(resume_router.router, prefix="/api/v1")
+app.include_router(skill_router.router, prefix="/api/v1")
 
 
 @app.get("/")
