@@ -9,39 +9,71 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Design tokens — also set as CSS vars in globals.css
+        // Design system color tokens mapped to CSS variables
+        ink: {
+          DEFAULT: "var(--color-ink)",
+          muted: "var(--color-ink-muted)",
+        },
+        paper: {
+          DEFAULT: "var(--color-paper)",
+          raised: "var(--color-paper-raised)",
+        },
+        forest: {
+          DEFAULT: "var(--color-forest)",
+          hover: "var(--color-forest-hover)",
+        },
+        brass: {
+          DEFAULT: "var(--color-brass)",
+          soft: "var(--color-brass-soft)",
+        },
+        teal: {
+          DEFAULT: "var(--color-teal)",
+        },
+        clay: {
+          alert: "var(--color-clay-alert)",
+        },
+        line: "var(--color-line)",
+
+        // shadcn/ui palette mapping
         primary: {
-          DEFAULT: "hsl(var(--primary))",
-          foreground: "hsl(var(--primary-foreground))",
+          DEFAULT: "var(--color-forest)",
+          foreground: "#FFFFFF",
         },
-        secondary: {
-          DEFAULT: "hsl(var(--secondary))",
-          foreground: "hsl(var(--secondary-foreground))",
-        },
-        background: "hsl(var(--background))",
-        foreground: "hsl(var(--foreground))",
-        muted: {
-          DEFAULT: "hsl(var(--muted))",
-          foreground: "hsl(var(--muted-foreground))",
-        },
-        border: "hsl(var(--border))",
+        background: "var(--color-paper)",
+        foreground: "var(--color-ink)",
         card: {
-          DEFAULT: "hsl(var(--card))",
-          foreground: "hsl(var(--card-foreground))",
+          DEFAULT: "var(--color-paper-raised)",
+          foreground: "var(--color-ink)",
         },
-      },
-      borderRadius: {
-        lg: "var(--radius)",
-        md: "calc(var(--radius) - 2px)",
-        sm: "calc(var(--radius) - 4px)",
+        muted: {
+          DEFAULT: "var(--color-paper)",
+          foreground: "var(--color-ink-muted)",
+        },
+        border: "var(--color-line)",
       },
       fontFamily: {
-        sans: ["Inter", "ui-sans-serif", "system-ui", "sans-serif"],
+        display: ["var(--font-display)", "Fraunces", "serif"],
+        body: ["var(--font-body)", "IBM Plex Sans", "sans-serif"],
+        mono: ["var(--font-mono)", "IBM Plex Mono", "monospace"],
+        sans: ["var(--font-body)", "IBM Plex Sans", "sans-serif"],
+      },
+      fontSize: {
+        "display-xl": ["3.5rem", { lineHeight: "1.05" }],
+        "display-lg": ["2.5rem", { lineHeight: "1.1" }],
+        "display-md": ["1.75rem", { lineHeight: "1.2" }],
+        "body-lg": ["1.125rem", { lineHeight: "1.6" }],
+        body: ["1rem", { lineHeight: "1.6" }],
+        "body-sm": ["0.875rem", { lineHeight: "1.5" }],
+        "data-lg": ["2rem", { lineHeight: "1" }],
+        data: ["0.875rem", { lineHeight: "1.4" }],
+      },
+      borderRadius: {
+        md: "0.375rem", // 6px for buttons/inputs
+        xl: "0.75rem", // 12px for cards
       },
     },
   },
   plugins: [],
-  darkMode: "class",
 };
 
 export default config;

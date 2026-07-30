@@ -2,63 +2,70 @@
 
 /**
  * Dashboard page — consolidated summary view.
- * Includes a health-check status card to verify backend connectivity.
+ * Restyled matching design_system.md (§1, §2, §3, §5).
  */
 
+import Link from "next/link";
+import { FileText, Target, BarChart2, Compass, Activity } from "lucide-react";
 import { useHealth } from "@/lib/hooks/useHealth";
 
 export default function DashboardPage() {
   const { data: health, isLoading, isError } = useHealth();
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          Your career progress at a glance
+    <div className="space-y-8 max-w-5xl mx-auto pb-16">
+      <div className="space-y-1.5">
+        <h1 className="font-display text-display-lg tracking-tight text-ink">
+          Dashboard
+        </h1>
+        <p className="font-body text-body text-ink-muted">
+          Your career progress and instrument data at a glance.
         </p>
       </div>
 
-      {/* Backend health status — development helper */}
-      <div className="rounded-xl border border-border bg-card p-4 flex items-center gap-3">
+      {/* Backend health status indicator */}
+      <div className="rounded-xl border border-line bg-paper-raised p-4 flex items-center gap-3 shadow-sm">
         <span
           aria-hidden="true"
           className={`w-2.5 h-2.5 rounded-full ${
             isLoading
-              ? "bg-yellow-400 animate-pulse"
+              ? "bg-brass animate-pulse"
               : isError
-              ? "bg-red-500"
-              : "bg-green-500"
+              ? "bg-clay-alert"
+              : "bg-forest"
           }`}
         />
-        <span className="text-sm font-medium text-card-foreground">
-          {isLoading
-            ? "Checking backend…"
-            : isError
-            ? "Backend unreachable — start uvicorn"
-            : health?.message ?? "Backend OK"}
+        <span className="font-mono text-data font-medium text-ink flex items-center gap-2">
+          <Activity className="w-4 h-4 text-forest" />
+          <span>
+            {isLoading
+              ? "Connecting to backend service..."
+              : isError
+              ? "Backend service unreachable"
+              : health?.message ?? "Backend connected"}
+          </span>
         </span>
       </div>
 
-      {/* Module summary cards — wired in as each Phase 1+ module ships */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Module summary cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         {[
-          { label: "Resumes", value: "—", href: "/resume", icon: "📄" },
-          { label: "ATS Score", value: "—", href: "/resume", icon: "🎯" },
-          { label: "Skill Gaps", value: "—", href: "/skill", icon: "📊" },
-          { label: "Active Roadmaps", value: "—", href: "/learning", icon: "🗺️" },
-        ].map(({ label, value, href, icon }) => (
-          <a
+          { label: "Resumes", value: "—", href: "/resume", icon: FileText },
+          { label: "ATS Score", value: "—", href: "/resume", icon: Target },
+          { label: "Skill Gaps", value: "—", href: "/skill", icon: BarChart2 },
+          { label: "Active Roadmaps", value: "—", href: "/learning", icon: Compass },
+        ].map(({ label, value, href, icon: Icon }) => (
+          <Link
             key={label}
             href={href}
-            className="rounded-xl border border-border bg-card p-4 hover:bg-muted/50 transition-colors space-y-2"
+            className="rounded-xl border border-line bg-paper-raised p-6 hover:border-forest/40 transition-colors space-y-3 shadow-sm"
           >
             <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">{label}</span>
-              <span className="text-lg">{icon}</span>
+              <span className="font-body text-body-sm font-medium text-ink-muted">{label}</span>
+              <Icon className="w-5 h-5 text-forest" />
             </div>
-            <p className="text-2xl font-bold text-foreground">{value}</p>
-          </a>
+            <p className="font-mono text-data-lg font-bold text-ink">{value}</p>
+          </Link>
         ))}
       </div>
     </div>

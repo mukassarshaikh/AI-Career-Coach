@@ -1,84 +1,60 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 /* -------------------------------------------------------------------------
-   Design Tokens — CSS Custom Properties
-   Referenced by tailwind.config.ts colors + any custom components/charts
+   Design System Tokens — CSS Variables (design_system.md §1 & §9)
    ------------------------------------------------------------------------- */
 :root {
-  /* Colors — light mode */
-  --background: 220 20% 97%;
-  --foreground: 224 71% 4%;
+  --color-ink: #1B2A22;
+  --color-paper: #F2F3EE;
+  --color-paper-raised: #FFFFFF;
+  --color-forest: #25443A;
+  --color-forest-hover: #1D362D;
+  --color-brass: #C89B3C;
+  --color-brass-soft: #E8D9B0;
+  --color-teal: #3E6259;
+  --color-clay-alert: #B5533C;
+  --color-ink-muted: #6B675E;
+  --color-line: #DAD8CE;
 
-  --card: 0 0% 100%;
-  --card-foreground: 224 71% 4%;
-
-  --primary: 250 84% 58%;          /* Indigo-violet */
-  --primary-foreground: 0 0% 100%;
-
-  --secondary: 210 40% 96%;
-  --secondary-foreground: 222 47% 11%;
-
-  --muted: 210 40% 96%;
-  --muted-foreground: 215 16% 47%;
-
-  --border: 214 32% 91%;
-
-  --radius: 0.625rem;
-
-  /* Chart palette — use these in Recharts components */
-  --chart-1: 250 84% 58%;
-  --chart-2: 142 71% 45%;
-  --chart-3: 38 92% 50%;
-  --chart-4: 0 72% 51%;
-  --chart-5: 199 89% 48%;
+  /* Overrides for shadcn/ui variables */
+  --background: var(--color-paper);
+  --foreground: var(--color-ink);
+  --card: var(--color-paper-raised);
+  --card-foreground: var(--color-ink);
+  --popover: var(--color-paper-raised);
+  --popover-foreground: var(--color-ink);
+  --primary: var(--color-forest);
+  --primary-foreground: #FFFFFF;
+  --secondary: var(--color-paper-raised);
+  --secondary-foreground: var(--color-ink);
+  --muted: var(--color-paper);
+  --muted-foreground: var(--color-ink-muted);
+  --accent: var(--color-brass-soft);
+  --accent-foreground: var(--color-ink);
+  --destructive: var(--color-clay-alert);
+  --destructive-foreground: #FFFFFF;
+  --border: var(--color-line);
+  --input: var(--color-line);
+  --ring: var(--color-forest);
+  --radius: 0.375rem;
 }
 
-.dark {
-  --background: 224 71% 4%;
-  --foreground: 213 31% 91%;
-
-  --card: 222 47% 8%;
-  --card-foreground: 213 31% 91%;
-
-  --primary: 250 84% 65%;
-  --primary-foreground: 0 0% 100%;
-
-  --secondary: 222 47% 12%;
-  --secondary-foreground: 213 31% 91%;
-
-  --muted: 222 47% 12%;
-  --muted-foreground: 215 20% 65%;
-
-  --border: 222 47% 16%;
-}
-
-/* -------------------------------------------------------------------------
-   Base styles
-   ------------------------------------------------------------------------- */
+/* Base resets & typography rules */
 * {
   box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-
-html {
-  font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
 }
 
 body {
-  background-color: hsl(var(--background));
-  color: hsl(var(--foreground));
+  background-color: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-body), sans-serif;
   min-height: 100vh;
 }
 
-/* Focus ring — WCAG 2.1 AA */
+/* Keyboard focus ring — WCAG 2.1 AA compliant */
 *:focus-visible {
-  outline: 2px solid hsl(var(--primary));
+  outline: 2px solid var(--color-forest);
   outline-offset: 2px;
 }

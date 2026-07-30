@@ -2,13 +2,14 @@
 
 /**
  * Login page — (auth) route group, no sidebar/nav.
- * Uses NextAuth signIn() with credentials provider.
+ * Restyled matching design_system.md (§1, §2, §3, §5, §6, §10).
  */
 
 import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { Wordmark } from "@/components/layout/Wordmark";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -34,91 +35,94 @@ export default function LoginPage() {
     setLoading(false);
 
     if (res?.error) {
-      setError("Invalid credentials. Please try again.");
+      setError("Invalid email address or password. Verify your details and try again.");
     } else {
       router.push("/resume");
     }
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-slate-900 px-6 text-slate-100">
-      <div className="w-full max-w-sm space-y-6">
-        <div className="text-center space-y-2">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-indigo-600 text-white font-bold text-xl shadow-lg shadow-indigo-500/30 mb-2">
-            AI
-          </div>
-          <h1 className="text-2xl font-bold tracking-tight text-white">Welcome back</h1>
-          <p className="text-slate-400 text-sm">
-            Sign in to your AI Career Coach account
+    <main className="min-h-screen flex items-center justify-center bg-paper px-6 py-12">
+      <div className="w-full max-w-md space-y-8">
+        <div className="text-center space-y-3 flex flex-col items-center">
+          <Wordmark className="mb-2" />
+          <h1 className="font-display text-display-lg tracking-tight text-ink">
+            Sign in to your account
+          </h1>
+          <p className="font-body text-body-sm text-ink-muted">
+            Access your resume health score, skill-gap analysis, and career trajectory.
           </p>
         </div>
 
         {registered && (
-          <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/20 p-3 text-xs text-emerald-400 text-center">
-            Account created successfully! Please sign in below.
+          <div className="rounded-md bg-brass-soft/50 border border-brass p-3 text-body-sm text-ink text-center">
+            Account created successfully. Sign in with your credentials below.
           </div>
         )}
 
-        <form
-          id="login-form"
-          onSubmit={handleSubmit}
-          className="space-y-4 rounded-xl border border-slate-800 bg-slate-950/80 p-6 shadow-xl backdrop-blur"
-          noValidate
-        >
-          <div className="space-y-1">
-            <label htmlFor="email" className="block text-xs font-semibold uppercase tracking-wider text-slate-300">
-              Email Address
-            </label>
-            <input
-              id="email"
-              type="email"
-              autoComplete="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
-              placeholder="you@example.com"
-            />
-          </div>
+        <div className="rounded-xl border border-line bg-paper-raised p-8 shadow-sm space-y-6">
+          <form id="login-form" onSubmit={handleSubmit} className="space-y-5" noValidate>
+            <div className="space-y-1.5">
+              <label
+                htmlFor="email"
+                className="block font-body text-body-sm font-medium text-ink"
+              >
+                Email address
+              </label>
+              <input
+                id="email"
+                type="email"
+                autoComplete="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full rounded-md border border-line bg-paper-raised px-3.5 py-2.5 text-body-sm text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-forest focus:border-transparent transition-all"
+                placeholder="you@example.com"
+              />
+            </div>
 
-          <div className="space-y-1">
-            <label htmlFor="password" className="block text-xs font-semibold uppercase tracking-wider text-slate-300">
-              Password
-            </label>
-            <input
-              id="password"
-              type="password"
-              autoComplete="current-password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
-              placeholder="••••••••"
-            />
-          </div>
+            <div className="space-y-1.5">
+              <label
+                htmlFor="password"
+                className="block font-body text-body-sm font-medium text-ink"
+              >
+                Password
+              </label>
+              <input
+                id="password"
+                type="password"
+                autoComplete="current-password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full rounded-md border border-line bg-paper-raised px-3.5 py-2.5 text-body-sm text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-forest focus:border-transparent transition-all"
+                placeholder="••••••••"
+              />
+            </div>
 
-          {error && (
-            <p role="alert" className="text-xs font-medium text-rose-400">
-              {error}
-            </p>
-          )}
+            {error && (
+              <p role="alert" className="font-body text-body-sm font-medium text-clay-alert">
+                {error}
+              </p>
+            )}
 
-          <button
-            id="login-submit"
-            type="submit"
-            disabled={loading}
-            className="w-full rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-600/30 hover:bg-indigo-500 disabled:opacity-50 transition-all cursor-pointer"
-          >
-            {loading ? "Signing in…" : "Sign in"}
-          </button>
-        </form>
+            <button
+              id="login-submit"
+              type="submit"
+              disabled={loading}
+              className="w-full rounded-md bg-forest px-4 py-2.5 font-body text-body-sm font-medium text-white shadow-sm hover:bg-forest-hover disabled:opacity-50 transition-colors cursor-pointer"
+            >
+              {loading ? "Signing in..." : "Sign in"}
+            </button>
+          </form>
 
-        <p className="text-center text-xs text-slate-400">
-          Don&apos;t have an account?{" "}
-          <Link href="/register" className="font-semibold text-indigo-400 hover:text-indigo-300 hover:underline">
-            Create one
-          </Link>
-        </p>
+          <p className="text-center font-body text-body-sm text-ink-muted pt-2 border-t border-line">
+            Don&apos;t have an account?{" "}
+            <Link href="/register" className="font-medium text-forest hover:underline">
+              Create one
+            </Link>
+          </p>
+        </div>
       </div>
     </main>
   );

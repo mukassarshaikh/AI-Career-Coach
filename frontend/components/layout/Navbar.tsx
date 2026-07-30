@@ -2,10 +2,11 @@
 
 /**
  * Navbar — top bar with user info and sign-out button.
- * Per frontend_architecture.md: /components/layout/Navbar
+ * Restyled matching design_system.md §5 & §6.
  */
 
 import { signOut } from "next-auth/react";
+import { LogOut } from "lucide-react";
 
 interface NavbarProps {
   user: { name: string | null; email: string };
@@ -13,17 +14,17 @@ interface NavbarProps {
 
 export function Navbar({ user }: NavbarProps) {
   return (
-    <header className="h-14 border-b border-border bg-card px-6 flex items-center justify-between flex-shrink-0">
-      <p className="text-sm text-muted-foreground">
-        {/* Page title injected by each page's <h1> — Navbar shows user greeting */}
-        Welcome, <span className="font-medium text-foreground">{user.name ?? user.email}</span>
+    <header className="h-16 border-b border-line bg-paper-raised px-8 flex items-center justify-between flex-shrink-0">
+      <p className="text-body-sm text-ink-muted">
+        Signed in as <span className="font-medium text-ink">{user.name ?? user.email}</span>
       </p>
       <button
         id="sign-out-button"
         onClick={() => signOut({ callbackUrl: "/login" })}
-        className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+        className="inline-flex items-center gap-2 text-body-sm font-medium text-ink-muted hover:text-ink transition-colors cursor-pointer"
       >
-        Sign out
+        <LogOut className="w-4 h-4" />
+        <span>Sign out</span>
       </button>
     </header>
   );

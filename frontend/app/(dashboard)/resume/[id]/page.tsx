@@ -2,11 +2,12 @@
 
 /**
  * Resume Detail / Report Page (Stub)
- * Navigation target for the next story.
+ * Restyled matching design_system.md (§1, §2, §3, §5).
  */
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { ArrowLeft, Loader2, FileText } from "lucide-react";
 import { useResume, useResumeReport } from "@/lib/hooks/useResume";
 
 export default function ResumeDetailPage() {
@@ -17,59 +18,64 @@ export default function ResumeDetailPage() {
   const { data: report, isLoading: isReportLoading } = useResumeReport(resumeId);
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto pb-12">
+    <div className="space-y-8 max-w-4xl mx-auto pb-16">
       <div className="flex items-center justify-between">
         <Link
           href="/resume"
-          className="text-xs text-indigo-400 hover:underline flex items-center gap-1 font-medium"
+          className="font-body text-body-sm text-forest hover:underline flex items-center gap-1.5 font-medium"
         >
-          ← Back to Resume Upload
+          <ArrowLeft className="w-4 h-4" />
+          <span>Back to Resume Upload</span>
         </Link>
-        <span className="text-xs text-slate-500 font-mono">ID: {resumeId}</span>
+        <span className="font-mono text-data text-ink-muted">ID: {resumeId}</span>
       </div>
 
-      <div className="rounded-xl border border-slate-800 bg-slate-950/80 p-6 space-y-4">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+      <div className="rounded-xl border border-line bg-paper-raised p-8 space-y-6 shadow-sm">
+        <div className="flex items-center justify-between border-b border-line pb-5">
           <div>
-            <h1 className="text-xl font-bold text-slate-100">Resume Evaluation & ATS Report</h1>
-            <p className="text-xs text-slate-400">Detailed breakdown, grammar audit, and target job description analysis.</p>
+            <h1 className="font-display text-display-md text-ink">Resume Evaluation & ATS Report</h1>
+            <p className="font-body text-body-sm text-ink-muted">Detailed breakdown, grammar audit, and target job description analysis.</p>
           </div>
-          <span className="px-3 py-1 rounded-full text-xs font-bold bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">
-            Phase 1 Story 2 (Next Story)
+          <span className="px-3 py-1 rounded-md font-mono text-data font-semibold bg-brass-soft/50 text-ink border border-brass/30">
+            Next Story Target
           </span>
         </div>
 
         {isResumeLoading || isReportLoading ? (
-          <div className="p-8 text-center text-xs text-slate-400 animate-pulse">
-            Loading resume details from backend API...
+          <div className="p-10 text-center font-body text-body-sm text-ink-muted flex items-center justify-center gap-2">
+            <Loader2 className="w-4 h-4 animate-spin text-forest" />
+            <span>Loading resume evaluation from server...</span>
           </div>
         ) : (
-          <div className="space-y-4 pt-2">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="p-4 rounded-lg bg-slate-900 border border-slate-800 space-y-1">
-                <p className="text-xs text-slate-400 font-medium">Overall ATS Score</p>
-                <p className="text-3xl font-extrabold text-emerald-400">
+          <div className="space-y-6 pt-2">
+            <div className="grid grid-cols-2 gap-5">
+              <div className="p-5 rounded-xl bg-paper border border-line space-y-1.5">
+                <p className="font-body text-body-sm font-medium text-ink-muted">Overall ATS Score</p>
+                <p className="font-mono text-data-lg font-bold text-forest">
                   {resume?.ats_score ?? report?.ats_breakdown?.overall_score ?? "N/A"} / 100
                 </p>
               </div>
 
-              <div className="p-4 rounded-lg bg-slate-900 border border-slate-800 space-y-1">
-                <p className="text-xs text-slate-400 font-medium">File Storage</p>
+              <div className="p-5 rounded-xl bg-paper border border-line space-y-1.5">
+                <p className="font-body text-body-sm font-medium text-ink-muted flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-forest" />
+                  <span>Cloudinary Storage URL</span>
+                </p>
                 <a
                   href={resume?.file_url}
                   target="_blank"
                   rel="noreferrer"
-                  className="text-xs text-indigo-400 hover:underline truncate block"
+                  className="font-mono text-data text-forest hover:underline truncate block"
                 >
-                  {resume?.file_url || "Cloudinary Storage URL"}
+                  {resume?.file_url || "Cloudinary URL"}
                 </a>
               </div>
             </div>
 
-            <div className="rounded-lg bg-indigo-500/10 border border-indigo-500/20 p-4 text-xs text-indigo-300">
-              <p className="font-semibold text-sm mb-1">Navigation Target Ready!</p>
-              <p>
-                The full ATS score gauge, grammar suggestions list, and job description keyword gap input will be built in the next story.
+            <div className="rounded-xl bg-brass-soft/30 border border-brass/30 p-5 text-body-sm text-ink">
+              <p className="font-body font-semibold text-body mb-1">Navigation Target Verified</p>
+              <p className="font-body text-ink-muted">
+                The full ATS score arc gauge, grammar suggestions audit cards, and target job description keyword gap input will be built in Frontend Story 2.
               </p>
             </div>
           </div>

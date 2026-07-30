@@ -1,8 +1,7 @@
 /**
  * Dashboard layout — shared shell for all (dashboard) routes.
  * Includes sidebar navigation and a top navbar.
- * Verifies session server-side; middleware.ts handles the redirect,
- * but we double-check here for defensive coding.
+ * Restyled matching design_system.md.
  */
 
 import { getServerSession } from "next-auth";
@@ -22,11 +21,11 @@ export default async function DashboardLayout({
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
+    <div className="flex h-screen overflow-hidden bg-paper text-ink font-body antialiased">
       <Sidebar />
       <div className="flex flex-col flex-1 overflow-hidden">
         <Navbar user={session.user} />
-        <main className="flex-1 overflow-y-auto p-6">{children}</main>
+        <main className="flex-1 overflow-y-auto p-8">{children}</main>
       </div>
     </div>
   );
