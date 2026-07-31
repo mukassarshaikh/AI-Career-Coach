@@ -39,3 +39,6 @@ async def health_check_authenticated(
         status="ok",
         message=f"Authenticated as {current_user.email}",
     )
+
+
+

@@ -3,12 +3,12 @@ Arq WorkerSettings — entrypoint for the Arq job worker process.
 
 Run with:
     arq app.workers.worker_settings.WorkerSettings
-
-The worker runs as a separate process alongside uvicorn, sharing the same
-codebase but consuming jobs from the Redis queue instead of handling HTTP.
+    OR:
+    python -m app.workers.worker_settings
 """
 
 from arq.connections import RedisSettings
+from arq.worker import run_worker
 
 from app.core.config import settings
 from app.workers.jobs.analyze_keywords import analyze_keywords
@@ -48,3 +48,7 @@ class WorkerSettings:
     redis_settings = RedisSettings.from_dsn(settings.redis_url)
     max_jobs = 10
     job_timeout = 300  # 5-minute max per job
+
+
+if __name__ == "__main__":
+    run_worker(WorkerSettings)

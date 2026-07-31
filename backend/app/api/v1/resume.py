@@ -2,26 +2,24 @@
 Resume Intelligence API routes — /api/v1/resume/*
 
 Endpoints:
-  - POST /api/v1/resume/upload: Upload PDF/DOCX resume file to Cloudinary, create DB record, and enqueue parse_resume Arq job.
+  - POST /api/v1/resume/upload: Upload PDF/DOCX resume file to Cloudinary, create DB record, and enqueue parse_resume job.
   - GET /api/v1/resume: List all resumes owned by current authenticated user.
   - POST /api/v1/resume/{resume_id}/score: Queue resume ATS scoring & grammar audit job.
   - POST /api/v1/resume/{resume_id}/job-description: Submit target job description text & queue keyword gap analysis.
   - GET /api/v1/resume/{resume_id}/report: Fetch latest resume evaluation report.
-  - GET /api/v1/resume/jobs/{job_id}: Poll Arq job processing status in Redis.
+  - GET /api/v1/resume/jobs/{job_id}: Poll job processing status.
   - GET /api/v1/resume/{resume_id}: Fetch resume record by ID for the authenticated user.
 """
 
 import logging
 from uuid import UUID
 
-from arq import create_pool
-from arq.connections import RedisSettings
 from arq.jobs import Job, JobStatus
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.deps import get_current_user, get_db
-from app.core.config import settings
+from app.core.redis_pool import get_redis_pool
 from app.models.user import User
 from app.schemas.resume import (
     JobDescriptionCreate,
@@ -40,42 +38,64 @@ router = APIRouter(prefix="/resume", tags=["resume"])
 
 
 async def _enqueue_parse_job(resume_id: UUID) -> str:
-    """Helper function to enqueue parse_resume job to Arq via Redis."""
+    """Enqueue parse_resume via the shared Arq pool. Raises HTTPException(503)
+    if the queue is unavailable — never fabricates a job_id, since a fake ID
+    can never be enqueued and will silently never run."""
     try:
-        redis = await create_pool(RedisSettings.from_dsn(settings.redis_url))
+        redis = get_redis_pool()
         job = await redis.enqueue_job("parse_resume", str(resume_id))
-        job_id = job.job_id if job else f"job_{resume_id}"
-        await redis.close()
-        return job_id
     except Exception as exc:
-        logger.warning(f"Redis connection failed during parse enqueue ({exc}). Using synthetic job_id.")
-        return f"job_{resume_id}"
+        logger.error(f"Failed to enqueue parse_resume for resume_id={resume_id}: {exc}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Background processing is temporarily unavailable. Try again in a moment.",
+        )
+    if job is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Could not enqueue resume parsing job.",
+        )
+    return job.job_id
 
 
 async def _enqueue_score_job(resume_id: UUID) -> str:
-    """Helper function to enqueue score_resume job to Arq via Redis."""
+    """Enqueue score_resume via the shared Arq pool. See _enqueue_parse_job
+    for the no-fake-id, no-silent-fallback rule."""
     try:
-        redis = await create_pool(RedisSettings.from_dsn(settings.redis_url))
+        redis = get_redis_pool()
         job = await redis.enqueue_job("score_resume", str(resume_id))
-        job_id = job.job_id if job else f"job_score_{resume_id}"
-        await redis.close()
-        return job_id
     except Exception as exc:
-        logger.warning(f"Redis connection failed during score enqueue ({exc}). Using synthetic job_id.")
-        return f"job_score_{resume_id}"
+        logger.error(f"Failed to enqueue score_resume for resume_id={resume_id}: {exc}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Background processing is temporarily unavailable. Try again in a moment.",
+        )
+    if job is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Could not enqueue resume scoring job.",
+        )
+    return job.job_id
 
 
 async def _enqueue_analyze_keywords_job(job_description_id: UUID, resume_id: UUID) -> str:
-    """Helper function to enqueue analyze_keywords job to Arq via Redis."""
+    """Enqueue analyze_keywords via the shared Arq pool. See _enqueue_parse_job
+    for the no-fake-id, no-silent-fallback rule."""
     try:
-        redis = await create_pool(RedisSettings.from_dsn(settings.redis_url))
+        redis = get_redis_pool()
         job = await redis.enqueue_job("analyze_keywords", str(job_description_id), str(resume_id))
-        job_id = job.job_id if job else f"job_kw_{job_description_id}"
-        await redis.close()
-        return job_id
     except Exception as exc:
-        logger.warning(f"Redis connection failed during analyze_keywords enqueue ({exc}). Using synthetic job_id.")
-        return f"job_kw_{job_description_id}"
+        logger.error(f"Failed to enqueue analyze_keywords for jd_id={job_description_id}: {exc}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Background processing is temporarily unavailable. Try again in a moment.",
+        )
+    if job is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Could not enqueue keyword analysis job.",
+        )
+    return job.job_id
 
 
 @router.post(
@@ -253,9 +273,23 @@ async def get_job_status(
 ) -> JobStatusResponse:
     """
     Queries Redis via Arq to return the background job's status for polling.
+    Never reports a status other than what Arq actually says. A job that
+    doesn't exist (not_found) or a Redis outage are both surfaced as
+    status='failed' with a clear message — they are NOT reported as
+    'complete', since that previously caused the frontend to display stale
+    or missing data as if processing had genuinely finished.
     """
     try:
-        redis = await create_pool(RedisSettings.from_dsn(settings.redis_url))
+        redis = get_redis_pool()
+    except RuntimeError as exc:
+        logger.error(f"Redis pool unavailable while checking job_id={job_id}: {exc}")
+        return JobStatusResponse(
+            job_id=job_id,
+            status="failed",
+            result={"error": "Background job queue is unreachable. Check server logs and Redis connectivity."},
+        )
+
+    try:
         job = Job(job_id, redis)
         arq_status = await job.status()
         result = None
@@ -264,27 +298,31 @@ async def get_job_status(
             try:
                 res = await job.result()
                 result = res if isinstance(res, dict) else {"output": str(res)}
-            except Exception:
-                result = None
+            except Exception as exc:
+                logger.error(f"Job {job_id} reported complete but result() raised: {exc}")
+                return JobStatusResponse(
+                    job_id=job_id,
+                    status="failed",
+                    result={"error": "Job finished but its result could not be read. Check server logs."},
+                )
             status_str = "complete"
         elif arq_status in (JobStatus.queued, JobStatus.deferred):
             status_str = "queued"
         elif arq_status == JobStatus.in_progress:
             status_str = "in_progress"
         elif arq_status == JobStatus.not_found:
-            status_str = "complete"
-            result = {"info": "Job not found in active queue cache"}
+            status_str = "failed"
+            result = {"error": "Job not found. It may have expired, or was never successfully enqueued."}
         else:
             status_str = "failed"
 
-        await redis.close()
         return JobStatusResponse(job_id=job_id, status=status_str, result=result)
     except Exception as exc:
-        logger.warning(f"Could not connect to Redis for job_id={job_id}: {exc}")
+        logger.error(f"Error checking job status for job_id={job_id}: {exc}")
         return JobStatusResponse(
             job_id=job_id,
-            status="complete",
-            result={"info": "Redis unreachable; status defaulted to complete"},
+            status="failed",
+            result={"error": "Could not check job status. Check server logs and Redis connectivity."},
         )
 
 
