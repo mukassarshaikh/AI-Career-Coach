@@ -4,6 +4,8 @@ import type {
   ResumeReportResponse,
   ResumeResponse,
   ResumeUploadResponse,
+  ScoreResumeResponse,
+  SubmitJobDescriptionResponse,
 } from "@/types/resume";
 
 export async function uploadResumeFile(file: File): Promise<ResumeUploadResponse> {
@@ -31,6 +33,23 @@ export async function getJobStatus(jobId: string): Promise<JobStatusResponse> {
 export async function getResume(resumeId: string): Promise<ResumeResponse> {
   return fetchWithAuth<ResumeResponse>(`/api/v1/resume/${resumeId}`, {
     method: "GET",
+  });
+}
+
+export async function scoreResume(resumeId: string): Promise<ScoreResumeResponse> {
+  return fetchWithAuth<ScoreResumeResponse>(`/api/v1/resume/${resumeId}/score`, {
+    method: "POST",
+  });
+}
+
+export async function submitJobDescription(
+  resumeId: string,
+  rawText: string
+): Promise<SubmitJobDescriptionResponse> {
+  return fetchWithAuth<SubmitJobDescriptionResponse>(`/api/v1/resume/${resumeId}/job-description`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ raw_text: rawText }),
   });
 }
 

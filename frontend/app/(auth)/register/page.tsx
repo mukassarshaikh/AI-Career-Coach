@@ -7,12 +7,14 @@
 
 import { useState } from "react";
 import { signIn } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Wordmark } from "@/components/layout/Wordmark";
 
 export default function RegisterPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const callbackUrl = searchParams?.get("callbackUrl") || "/resume";
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -49,9 +51,9 @@ export default function RegisterPage() {
       setLoading(false);
 
       if (signInRes?.error) {
-        router.push("/login?registered=1");
+        window.location.href = "/login?registered=1";
       } else {
-        router.push("/resume");
+        window.location.href = callbackUrl;
       }
     } catch {
       setError("Could not connect to the authentication server.");

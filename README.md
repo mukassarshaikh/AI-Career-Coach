@@ -11,11 +11,11 @@ A free-tier, self-bootstrapped platform unifying four intelligence engines — R
 
 ## Tech Stack
 
-Frontend: Next.js + React + TypeScript + Tailwind + TanStack Query + Recharts, hosted on Vercel.
-Backend: Python (FastAPI) + Arq (job queue), hosted on Oracle Cloud Free Tier.
-Database: Neon (Postgres) + pgvector for embeddings.
-LLM: Groq API (free tier).
-Auth: NextAuth.js. Storage: Cloudinary (free tier).
+Frontend: Next.js + React + TypeScript + Tailwind + TanStack Query + Recharts, hosted on Vercel.  
+Backend: Python (FastAPI) + Arq (job queue), hosted on Oracle Cloud Free Tier.  
+Database: Neon (Postgres) + pgvector for embeddings.  
+LLM: Groq API (free tier).  
+Auth: NextAuth.js. Storage: Cloudinary (free tier).  
 
 Everything in this stack is free-tier / open-source — no paid services required to run the MVP.
 
@@ -51,9 +51,21 @@ Everything in this stack is free-tier / open-source — no paid services require
    ```
    > **Note on Model Download**: Running the seed script or generating skill vectors for the first time will cause `sentence-transformers` to download the `all-MiniLM-L6-v2` embedding model (~80MB) from Hugging Face. This requires outbound internet access on first run and may take a moment; it is a one-time download and is cached locally afterward.
 
-7. Start the Arq worker (for async jobs):
+7. **Start Redis & Arq Worker (Required for Async Background Jobs)**:
+   > **IMPORTANT**: Redis must be running locally on `localhost:6379` before testing any async job flows (`parse_resume`, `score_resume`, `analyze_keywords`, `generate_skill_vector`, `compute_skill_gap`).
+
+   Start Redis:
+   ```bash
+   redis-server
+   # OR using Docker:
+   docker run -d -p 6379:6379 redis:7-alpine
+   ```
+
+   Start the Arq worker process in a separate backend terminal window:
    ```bash
    cd backend
+   python -m app.workers.worker_settings
+   # OR using arq CLI:
    python -m arq app.workers.worker_settings.WorkerSettings
    ```
 

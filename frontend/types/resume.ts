@@ -1,6 +1,6 @@
-"""
-resume.ts — Shared TypeScript interfaces matching backend Pydantic schemas.
-"""
+/**
+ * resume.ts — Shared TypeScript interfaces matching backend Pydantic schemas.
+ */
 
 export interface ResumeUploadResponse {
   resume_id: string;
@@ -28,6 +28,13 @@ export interface JobStatusResponse {
 }
 
 export interface ScoreResumeResponse {
+  resume_id: string;
+  job_id: string;
+  message: string;
+}
+
+export interface SubmitJobDescriptionResponse {
+  job_description_id: string;
   resume_id: string;
   job_id: string;
   message: string;

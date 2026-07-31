@@ -15,6 +15,7 @@ export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const registered = searchParams?.get("registered");
+  const callbackUrl = searchParams?.get("callbackUrl") || "/resume";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -37,7 +38,7 @@ export default function LoginPage() {
     if (res?.error) {
       setError("Invalid email address or password. Verify your details and try again.");
     } else {
-      router.push("/resume");
+      window.location.href = callbackUrl;
     }
   }
 
