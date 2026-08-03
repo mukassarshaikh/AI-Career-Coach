@@ -56,7 +56,8 @@ export const authOptions: NextAuthOptions = {
             id: user.id,
             email: user.email,
             name: user.name || user.email.split("@")[0],
-          };
+            accessToken: user.access_token,
+          } as User;
         } catch {
           return null;
         }
@@ -71,6 +72,7 @@ export const authOptions: NextAuthOptions = {
         token.email = user.email;
         token.name = user.name;
         token.sub = user.email;
+        token.accessToken = (user as any).accessToken;
       }
       return token;
     },
@@ -83,7 +85,7 @@ export const authOptions: NextAuthOptions = {
           email: token.email as string,
           name: token.name as string | null,
         };
-        (session as any).accessToken = token.email || token.sub;
+        (session as any).accessToken = token.accessToken;
       }
       return session;
     },

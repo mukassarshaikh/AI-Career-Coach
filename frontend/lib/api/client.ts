@@ -13,8 +13,8 @@ export async function fetchWithAuth<T>(
   const session = await getSession();
   const headers = new Headers(options.headers || {});
 
-  // Extract authentication token / user email from NextAuth session
-  const rawToken = (session as any)?.accessToken || (session as any)?.user?.email;
+  // Extract authentication token from NextAuth session
+  const rawToken = (session as any)?.accessToken;
   const token = typeof rawToken === "string" ? rawToken : null;
 
   if (token && !headers.has("Authorization")) {

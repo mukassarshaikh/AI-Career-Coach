@@ -30,18 +30,26 @@ async def get_current_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
     db: AsyncSession = Depends(get_db),
 ) -> User:
-    if credentials is None:
+    unauthorized_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid or expired session token",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    if credentials is None or not credentials.credentials:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    email = get_email_from_token(credentials.credentials)
+    try:
+        email = get_email_from_token(credentials.credentials)
+    except HTTPException:
+        raise unauthorized_exception
+    except Exception:
+        raise unauthorized_exception
+
     result = await db.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
     if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found",
-        )
+        raise unauthorized_exception
     return user

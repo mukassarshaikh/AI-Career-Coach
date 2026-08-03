@@ -31,5 +31,7 @@ class AuthUserResponse(BaseModel):
     email: str
     name: Optional[str] = None
     created_at: datetime
+    access_token: Optional[str] = Field(None, description="Signed HS256 JWT access token for API authorization")
+    token_type: str = Field("bearer", description="Token type, default 'bearer'")
 
     model_config = ConfigDict(from_attributes=True)

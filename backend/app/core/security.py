@@ -6,8 +6,9 @@ We decode that token here using the same secret so the backend can
 independently verify every authenticated request.
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Optional
+from uuid import UUID
 
 import bcrypt
 from fastapi import HTTPException, status
@@ -17,6 +18,7 @@ from passlib.context import CryptContext
 from app.core.config import settings
 
 ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours
 
 # Fallback passlib context
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -49,14 +51,39 @@ def get_password_hash(password: str) -> str:
         return pwd_context.hash(password)
 
 
+def create_access_token(
+    user_id: UUID,
+    email: str,
+    expires_delta: Optional[timedelta] = None,
+) -> str:
+    """
+    Mints a backend-issued HS256 JWT access token with sub, email, iat, and exp claims.
+    Default lifetime is 24 hours.
+    """
+    now = datetime.now(timezone.utc)
+    if expires_delta:
+        expire = now + expires_delta
+    else:
+        expire = now + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+
+    to_encode = {
+        "sub": str(user_id),
+        "email": email,
+        "iat": int(now.timestamp()),
+        "exp": int(expire.timestamp()),
+    }
+    return jwt.encode(to_encode, settings.nextauth_secret, algorithm=ALGORITHM)
+
+
 def decode_nextauth_token(token: str) -> dict:
     """
-    Decode and validate a NextAuth JWT or dev-session Bearer token.
-    Returns the decoded payload on success, raises HTTPException on failure.
+    Strictly decode and validate a backend-issued HS256 Bearer JWT.
+    Verifies signature and expiration using settings.nextauth_secret.
+    Raises HTTPException(401) on any failure — NO fallbacks.
     """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
+        detail="Invalid or expired session token",
         headers={"WWW-Authenticate": "Bearer"},
     )
     if not token or not isinstance(token, str):
@@ -64,38 +91,21 @@ def decode_nextauth_token(token: str) -> dict:
 
     token_str = token.strip()
 
-    # 1. Attempt standard HS256 JWT decoding
     try:
         payload = jwt.decode(
             token_str,
             settings.nextauth_secret,
             algorithms=[ALGORITHM],
-            options={"verify_aud": False},
+            options={"verify_aud": False, "verify_signature": True, "verify_exp": True},
         )
         email: Optional[str] = payload.get("email") or payload.get("sub")
-        if email:
-            return payload
+        if not email:
+            raise credentials_exception
+        return payload
+    except JWTError:
+        raise credentials_exception
     except Exception:
-        pass
-
-    # 2. Attempt decoding unverified payload claims
-    try:
-        payload = jwt.decode(
-            token_str,
-            key="",
-            options={"verify_signature": False, "verify_aud": False},
-        )
-        email = payload.get("email") or payload.get("sub")
-        if email:
-            return payload
-    except Exception:
-        pass
-
-    # 3. Fallback: if token is user email address
-    if "@" in token_str and " " not in token_str:
-        return {"email": token_str, "sub": token_str}
-
-    raise credentials_exception
+        raise credentials_exception
 
 
 def get_email_from_token(token: str) -> str:
@@ -104,6 +114,8 @@ def get_email_from_token(token: str) -> str:
     if not email:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token missing email/sub claim",
+            detail="Invalid or expired session token",
+            headers={"WWW-Authenticate": "Bearer"},
         )
     return email
+

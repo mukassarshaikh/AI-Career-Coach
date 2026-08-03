@@ -61,7 +61,10 @@ async def register_user(
     await db.refresh(user)
 
     logger.info(f"Successfully registered user {user.email} (id={user.id})")
-    return AuthUserResponse.model_validate(user)
+    access_token = security.create_access_token(user.id, user.email)
+    response = AuthUserResponse.model_validate(user)
+    response.access_token = access_token
+    return response
 
 
 @router.post(
@@ -69,7 +72,7 @@ async def register_user(
     response_model=AuthUserResponse,
     status_code=status.HTTP_200_OK,
     summary="Verify user credentials",
-    description="Verifies user email & password against stored bcrypt hash. Returns user profile for NextAuth authorize callback.",
+    description="Verifies user email & password against stored bcrypt hash. Returns user profile & access token for NextAuth authorize callback.",
 )
 async def login_user(
     body: LoginRequest,
@@ -77,6 +80,7 @@ async def login_user(
 ) -> AuthUserResponse:
     """
     Verifies user credentials. Returns generic 401 Unauthorized for both wrong email and wrong password.
+    Returns signed access_token on success.
     """
     # Generic exception to prevent user enumeration attacks
     invalid_credentials_exception = HTTPException(
@@ -97,4 +101,7 @@ async def login_user(
         raise invalid_credentials_exception
 
     logger.info(f"Successful credentials login for user {user.email} (id={user.id})")
-    return AuthUserResponse.model_validate(user)
+    access_token = security.create_access_token(user.id, user.email)
+    response = AuthUserResponse.model_validate(user)
+    response.access_token = access_token
+    return response
