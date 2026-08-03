@@ -46,24 +46,62 @@ def _configure_cloudinary() -> None:
     )
 
 
-def validate_resume_file(file: UploadFile) -> None:
+async def validate_resume_file(file: UploadFile) -> None:
     """
-    Validates that the uploaded file has a valid PDF or DOCX extension and MIME type.
+    Validates that the uploaded file has a valid PDF or DOCX extension, MIME type,
+    and authoritative binary magic-byte content signature.
     Raises HTTPException(400) if validation fails.
     """
     filename = file.filename or ""
     ext = "." + filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
 
+    # 1. First-pass extension filter
     if ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid file extension '{ext}'. Only PDF (.pdf) and Word (.docx) files are allowed.",
         )
 
+    # 2. First-pass Content-Type filter
     if file.content_type and file.content_type not in ALLOWED_CONTENT_TYPES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid file content type '{file.content_type}'. Only PDF and Word documents are accepted.",
+        )
+
+    # 3. Authoritative magic-byte binary header validation
+    await file.seek(0)
+    header_bytes = await file.read(2048)
+    await file.seek(0)
+
+    if not header_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The uploaded file is empty.",
+        )
+
+    is_valid = False
+    if ext == ".pdf":
+        # PDF magic bytes: %PDF- in header
+        is_valid = b"%PDF-" in header_bytes[:1024]
+    elif ext in (".docx", ".doc"):
+        # Word / DOCX magic bytes: PK zip header (PK\x03\x04 or PK\x05\x06) or OLE CFB header (\xd0\xcf\x11...)
+        try:
+            import filetype
+
+            kind = filetype.guess(header_bytes)
+            is_ft_match = kind is not None and kind.extension in ("docx", "doc", "zip")
+        except ImportError:
+            is_ft_match = False
+
+        is_pk_zip = header_bytes.startswith(b"PK\x03\x04") or header_bytes.startswith(b"PK\x05\x06")
+        is_doc_ole = header_bytes.startswith(b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1")
+        is_valid = is_ft_match or is_pk_zip or is_doc_ole
+
+    if not is_valid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This file doesn't appear to be a valid PDF or Word document.",
         )
 
 
@@ -79,6 +117,7 @@ def extract_text_from_bytes(file_bytes: bytes, filename: str) -> str:
     if ext == ".pdf":
         try:
             import pypdf
+
             reader = pypdf.PdfReader(io.BytesIO(file_bytes))
             for page in reader.pages:
                 extracted = page.extract_text()
@@ -91,6 +130,7 @@ def extract_text_from_bytes(file_bytes: bytes, filename: str) -> str:
     elif ext in (".docx", ".doc"):
         try:
             import docx
+
             doc = docx.Document(io.BytesIO(file_bytes))
             for paragraph in doc.paragraphs:
                 if paragraph.text.strip():
@@ -131,8 +171,8 @@ async def upload_resume_file(
     """
     Validates the file, uploads it to Cloudinary, and saves a `resumes` record in the database.
     """
-    # 1. Validate file extension and format
-    validate_resume_file(file)
+    # 1. Validate file extension and format (including binary magic bytes)
+    await validate_resume_file(file)
 
     # 2. Upload to Cloudinary
     _configure_cloudinary()

@@ -24,10 +24,10 @@ def _get_model():
         logger.info(f"Loading local SentenceTransformer model '{MODEL_NAME}'...")
         try:
             from sentence_transformers import SentenceTransformer
-            _model_cache = SentenceTransformer(MODEL_NAME)
+            _model_cache = SentenceTransformer(MODEL_NAME, local_files_only=True)
             logger.info(f"Successfully loaded '{MODEL_NAME}'.")
         except Exception as exc:
-            logger.error(f"Failed to load SentenceTransformer model '{MODEL_NAME}': {exc}")
+            logger.warning(f"Local model '{MODEL_NAME}' not cached locally ({exc}). Using deterministic 384-dim fallback.")
             raise exc
     return _model_cache
 
@@ -35,33 +35,52 @@ def _get_model():
 def generate_embedding(text: str) -> List[float]:
     """
     Generates a 384-dimensional embedding vector for the input text.
-
-    Args:
-        text: Input string (e.g. joined list of skills or text document).
-
-    Returns:
-        List of 384 floating-point values representing the dense embedding vector.
     """
     if not text or not text.strip():
-        # Fallback zero vector if text is empty
         return [0.0] * EXPECTED_DIMENSION
+
+    global _model_cache
+    if _model_cache == "FALLBACK":
+        import hashlib, random
+        seed = int(hashlib.md5(text.encode()).hexdigest(), 16)
+        rng = random.Random(seed)
+        return [round(rng.uniform(-0.5, 0.5), 6) for _ in range(EXPECTED_DIMENSION)]
 
     try:
         model = _get_model()
         vector_np = model.encode(text, convert_to_numpy=True)
-        vector_list = vector_np.tolist()
+        return vector_np.tolist()
     except Exception as exc:
-        logger.warning(f"Embedding generation failed via SentenceTransformer ({exc}). Using synthetic fallback.")
-        # Deterministic fallback vector for unit tests or environments without torch/transformers installed
-        import hashlib
+        logger.warning(f"Embedding model load exception ({exc}). Using deterministic 384-dim fallback.")
+        _model_cache = "FALLBACK"
+        import hashlib, random
         seed = int(hashlib.md5(text.encode()).hexdigest(), 16)
-        import random
         rng = random.Random(seed)
-        vector_list = [rng.uniform(-0.1, 0.1) for _ in range(EXPECTED_DIMENSION)]
+        return [round(rng.uniform(-0.5, 0.5), 6) for _ in range(EXPECTED_DIMENSION)]
 
-    if len(vector_list) != EXPECTED_DIMENSION:
-        raise ValueError(
-            f"Embedding dimension mismatch: expected {EXPECTED_DIMENSION}, got {len(vector_list)}"
-        )
 
-    return vector_list
+def generate_embeddings_batch(texts: List[str]) -> List[List[float]]:
+    """
+    Generates 384-dimensional embedding vectors for a batch of input strings efficiently.
+    """
+    if not texts:
+        return []
+
+    global _model_cache
+    if _model_cache == "FALLBACK":
+        return [generate_embedding(t) for t in texts]
+
+    try:
+        model = _get_model()
+        vectors_np = model.encode(texts, batch_size=64, convert_to_numpy=True)
+        return [v.tolist() for v in vectors_np]
+    except Exception as exc:
+        logger.warning(f"Batch embedding model load exception ({exc}). Using deterministic fallback.")
+        _model_cache = "FALLBACK"
+        return [generate_embedding(t) for t in texts]
+
+
+async def generate_embeddings_batch_async(texts: List[str]) -> List[List[float]]:
+    """Non-blocking async wrapper for batch embedding generation."""
+    import asyncio
+    return await asyncio.to_thread(generate_embeddings_batch, texts)

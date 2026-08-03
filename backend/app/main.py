@@ -1,31 +1,20 @@
-"""
-AI Career Coach — FastAPI application entry point.
-
-Registers all routers, configures CORS, and handles startup/shutdown events.
-"""
-
-import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.v1 import auth as auth_router
-from app.api.v1 import health as health_router
-from app.api.v1 import resume as resume_router
-from app.api.v1 import skill as skill_router
+from app.api.v1 import router as api_v1_router
 from app.core.config import settings
 from app.core.redis_pool import close_redis_pool, init_redis_pool
-
-logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Establish ONE shared Redis/Arq pool for the app's lifetime. If Redis is
-    # unreachable, init_redis_pool logs a warning and leaves the pool unset —
-    # every enqueue/status endpoint will then return a real 503/failed
-    # response rather than silently pretending jobs succeeded.
+    """
+    Application lifespan manager.
+    Initializes Redis connection pool on startup and closes it on shutdown.
+    """
+    # Startup — warm up Redis pool so any immediate job enqueue succeeds
     await init_redis_pool()
     yield
     await close_redis_pool()
@@ -44,6 +33,16 @@ app = FastAPI(
 )
 
 # ---------------------------------------------------------------------------
+# Rate Limiter — slowapi
+# ---------------------------------------------------------------------------
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from app.core.limiter import limiter
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# ---------------------------------------------------------------------------
 # CORS — restricted to the frontend origin only
 # ---------------------------------------------------------------------------
 app.add_middleware(
@@ -55,14 +54,6 @@ app.add_middleware(
 )
 
 # ---------------------------------------------------------------------------
-# Routers
+# API v1 Routers
 # ---------------------------------------------------------------------------
-app.include_router(health_router.router, prefix="/api/v1")
-app.include_router(auth_router.router, prefix="/api/v1")
-app.include_router(resume_router.router, prefix="/api/v1")
-app.include_router(skill_router.router, prefix="/api/v1")
-
-
-@app.get("/")
-async def root():
-    return {"message": "AI Career Coach API", "docs": "/docs"}
+app.include_router(api_v1_router, prefix="/api/v1")

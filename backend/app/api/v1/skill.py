@@ -13,11 +13,12 @@ from uuid import UUID
 
 from arq import create_pool
 from arq.connections import RedisSettings
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.deps import get_current_user, get_db
 from app.core.config import settings
+from app.core.limiter import limiter
 from app.models.user import User
 from app.schemas.skill import (
     ComputeSkillGapRequest,
@@ -66,13 +67,16 @@ async def _enqueue_compute_gap_job(user_id: UUID, target_role: str) -> str:
     summary="Generate or update skill vector from resume",
     description="Enqueues the generate_skill_vector background job for a parsed resume.",
 )
+@limiter.limit("20/hour")
 async def generate_skill_vector_endpoint(
+    request: Request,
     body: GenerateSkillVectorRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> GenerateSkillVectorResponse:
     """
     Verifies resume ownership and enqueues background skill vector generation.
+    Rate limited to 20 per hour per user.
     """
     resume = await resume_service.get_resume_by_id(
         db=db,
@@ -101,13 +105,16 @@ async def generate_skill_vector_endpoint(
     summary="Compute skill gap report",
     description="Enqueues the compute_skill_gap background job to evaluate candidate skill gaps against market reference data.",
 )
+@limiter.limit("20/hour")
 async def compute_skill_gap_endpoint(
+    request: Request,
     body: ComputeSkillGapRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> ComputeSkillGapResponse:
     """
     Enqueues background skill gap computation for the authenticated user against target_role.
+    Rate limited to 20 per hour per user.
     """
     skill_vector = await skill_service.get_skill_vector_by_user_id(db=db, user_id=current_user.id)
     if not skill_vector:
@@ -156,12 +163,15 @@ async def get_skill_gap_report(
     summary="Refresh skill gap report",
     description="Re-triggers skill gap computation against updated market references or skill vectors. Reuses POST /skill/gap-report logic.",
 )
+@limiter.limit("20/hour")
 async def refresh_skill_gap_endpoint(
+    request: Request,
     body: ComputeSkillGapRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> ComputeSkillGapResponse:
     """
     Re-enqueues background skill gap computation for semantic clarity (re-runs computation using same service/job).
+    Rate limited to 20 per hour per user.
     """
-    return await compute_skill_gap_endpoint(body=body, current_user=current_user, db=db)
+    return await compute_skill_gap_endpoint(request=request, body=body, current_user=current_user, db=db)

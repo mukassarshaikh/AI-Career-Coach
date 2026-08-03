@@ -8,12 +8,13 @@ Endpoints:
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.deps import get_db
 from app.core import security
+from app.core.limiter import limiter
 from app.models.user import User
 from app.schemas.auth import AuthUserResponse, LoginRequest, RegisterRequest
 
@@ -29,12 +30,15 @@ router = APIRouter(prefix="/auth", tags=["auth"])
     summary="Register a new user",
     description="Validates email uniqueness, hashes the password using bcrypt, and creates a user record.",
 )
+@limiter.limit("5/hour")
 async def register_user(
+    request: Request,
     body: RegisterRequest,
     db: AsyncSession = Depends(get_db),
 ) -> AuthUserResponse:
     """
     Registers a new user in Postgres. Returns 409 Conflict if email is already registered.
+    Rate limited to 5 registrations per hour per IP.
     """
     # 1. Check for existing user with same email
     stmt = select(User).where(User.email == body.email)
@@ -74,13 +78,15 @@ async def register_user(
     summary="Verify user credentials",
     description="Verifies user email & password against stored bcrypt hash. Returns user profile & access token for NextAuth authorize callback.",
 )
+@limiter.limit("10/15minute")
 async def login_user(
+    request: Request,
     body: LoginRequest,
     db: AsyncSession = Depends(get_db),
 ) -> AuthUserResponse:
     """
     Verifies user credentials. Returns generic 401 Unauthorized for both wrong email and wrong password.
-    Returns signed access_token on success.
+    Returns signed access_token on success. Rate limited to 10 attempts per 15 minutes per IP.
     """
     # Generic exception to prevent user enumeration attacks
     invalid_credentials_exception = HTTPException(

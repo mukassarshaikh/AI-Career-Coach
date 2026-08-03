@@ -3,7 +3,7 @@ Health-check routes.
 
 GET /api/v1/health          → public, no auth — confirms the backend is up
 GET /api/v1/health/auth     → protected — confirms the backend is up AND the
-                               frontend session token is valid
+                              frontend session token is valid
 """
 
 from fastapi import APIRouter, Depends
@@ -39,6 +39,3 @@ async def health_check_authenticated(
         status="ok",
         message=f"Authenticated as {current_user.email}",
     )
-
-
-

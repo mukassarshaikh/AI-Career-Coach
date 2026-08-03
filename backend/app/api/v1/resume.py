@@ -15,10 +15,11 @@ import logging
 from uuid import UUID
 
 from arq.jobs import Job, JobStatus
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.deps import get_current_user, get_db
+from app.core.limiter import limiter
 from app.core.redis_pool import get_redis_pool
 from app.models.user import User
 from app.schemas.resume import (
@@ -105,7 +106,9 @@ async def _enqueue_analyze_keywords_job(job_description_id: UUID, resume_id: UUI
     summary="Upload a resume file",
     description="Uploads a PDF or DOCX resume file to Cloudinary storage, creates a database record, and enqueues background parsing.",
 )
+@limiter.limit("10/hour")
 async def upload_resume(
+    request: Request,
     file: UploadFile = File(..., description="Resume file (PDF or DOCX format)"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -113,6 +116,7 @@ async def upload_resume(
     """
     Accepts an uploaded resume file (PDF or DOCX), uploads it to Cloudinary,
     inserts a record in the database, and enqueues the `parse_resume` background job.
+    Rate limited to 10 uploads per hour per user.
     """
     resume = await resume_service.upload_resume_file(
         file=file,
@@ -156,13 +160,16 @@ async def list_resumes(
     summary="Queue resume ATS scoring & grammar audit",
     description="Enqueues the score_resume background job for a parsed resume.",
 )
+@limiter.limit("20/hour")
 async def score_resume_endpoint(
+    request: Request,
     resume_id: UUID,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> ScoreResumeResponse:
     """
     Verifies resume ownership and enqueues the `score_resume` background job.
+    Rate limited to 20 per hour per user.
     """
     resume = await resume_service.get_resume_by_id(
         db=db,
@@ -191,7 +198,9 @@ async def score_resume_endpoint(
     summary="Submit target Job Description for keyword gap analysis",
     description="Submits a target Job Description text linked to a resume, enqueues the analyze_keywords background job, and returns job_id.",
 )
+@limiter.limit("20/hour")
 async def submit_job_description(
+    request: Request,
     resume_id: UUID,
     body: JobDescriptionCreate,
     current_user: User = Depends(get_current_user),

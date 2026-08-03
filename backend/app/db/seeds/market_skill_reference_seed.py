@@ -36,24 +36,26 @@ async def seed_market_skill_reference(db: AsyncSession) -> int:
         The total count of records inserted or updated.
     """
     logger.info(f"Beginning market skill reference seeding ({len(STARTER_MARKET_SKILLS)} items)...")
-    processed_count = 0
+    
+    # 1. Bulk query all existing market skill reference records in 1 network call
+    existing_stmt = select(MarketSkillReference)
+    existing_records = (await db.execute(existing_stmt)).scalars().all()
+    existing_map = {(r.role_title, r.skill_name): r for r in existing_records}
 
-    for item in STARTER_MARKET_SKILLS:
+    # 2. Batch generate 384-dim embeddings for all skills in 1 fast async thread pass
+    skill_names = [item["skill_name"] for item in STARTER_MARKET_SKILLS]
+    vectors_384 = await embedding_service.generate_embeddings_batch_async(skill_names)
+
+    processed_count = 0
+    new_objects = []
+
+    for idx, item in enumerate(STARTER_MARKET_SKILLS):
         role_title = item["role_title"]
         skill_name = item["skill_name"]
         demand_weight = item["demand_weight"]
+        vector_384 = vectors_384[idx] if idx < len(vectors_384) else embedding_service.generate_embedding(skill_name)
 
-        # Generate 384-dim embedding vector via local embedding_service
-        vector_384 = embedding_service.generate_embedding(skill_name)
-
-        # Idempotent upsert check on natural key (role_title, skill_name)
-        stmt = select(MarketSkillReference).where(
-            MarketSkillReference.role_title == role_title,
-            MarketSkillReference.skill_name == skill_name,
-        )
-        result = await db.execute(stmt)
-        existing = result.scalar_one_or_none()
-
+        existing = existing_map.get((role_title, skill_name))
         if existing:
             existing.demand_weight = demand_weight
             existing.vector = vector_384
@@ -66,9 +68,12 @@ async def seed_market_skill_reference(db: AsyncSession) -> int:
                 vector=vector_384,
                 source=STARTER_SOURCE,
             )
-            db.add(new_ref)
+            new_objects.append(new_ref)
 
         processed_count += 1
+
+    if new_objects:
+        db.add_all(new_objects)
 
     await db.commit()
     logger.info(f"Successfully seeded/updated {processed_count} market_skill_reference records.")
