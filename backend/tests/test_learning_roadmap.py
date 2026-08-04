@@ -1,6 +1,6 @@
 """
 Pytest integration test suite for Learning Intelligence roadmap generation, Arq worker job,
-archive-previous-active-roadmap logic, API endpoints, and 501 stub.
+archive-previous-active-roadmap logic, API endpoints, and item status updates.
 
 Run with:
     python -m pytest tests/test_learning_roadmap.py -v
@@ -226,7 +226,7 @@ async def test_generate_roadmap_job_success():
 
 
 # ---------------------------------------------------------------------------
-# 4. API Route Tests (POST /roadmap, GET /roadmap/{id}, POST /regenerate, PATCH 501)
+# 4. API Route Tests (POST /roadmap, GET /roadmap/{id}, POST /regenerate, PATCH /roadmap-item/{id})
 # ---------------------------------------------------------------------------
 def test_post_roadmap_route():
     """Verify POST /api/v1/learning/roadmap enqueues generate_roadmap job and returns job_id."""
@@ -368,20 +368,45 @@ def test_post_roadmap_regenerate_route():
         app.dependency_overrides.clear()
 
 
-def test_patch_roadmap_item_complete_stub_returns_501():
-    """Verify PATCH /api/v1/learning/roadmap-item/{id} returns 501 Not Implemented with clear message."""
+def test_patch_roadmap_item_status():
+    """Verify PATCH /api/v1/learning/roadmap-item/{id} updates item status and returns 200 OK."""
     token = generate_test_token()
     headers = {"Authorization": f"Bearer {token}"}
 
     dummy_user = User(id=uuid.uuid4(), email="learning_test@example.com")
-    from app.api.v1.deps import get_current_user
+    item_id = uuid.uuid4()
+
+    mock_item = RoadmapItem(
+        id=item_id,
+        roadmap_id=uuid.uuid4(),
+        skill_name="Docker",
+        type="course",
+        title="Docker Fundamentals",
+        sequence_order=1,
+        difficulty="beginner",
+        status="completed",
+        completed_at=datetime.now(),
+    )
+
+    from app.api.v1.deps import get_current_user, get_db
     app.dependency_overrides[get_current_user] = lambda: dummy_user
 
-    try:
-        item_id = uuid.uuid4()
-        response = client.patch(f"/api/v1/learning/roadmap-item/{item_id}", headers=headers)
+    mock_db = AsyncMock()
+    mock_db.add = MagicMock()
+    async def mock_get_db_gen():
+        yield mock_db
+    app.dependency_overrides[get_db] = mock_get_db_gen
 
-        assert response.status_code == 501
-        assert response.json()["detail"] == "Item completion tracking coming in the next release"
+    try:
+        with patch("app.services.learning_service.update_roadmap_item_status", AsyncMock(return_value=(mock_item, "Backend Engineer"))), \
+             patch("app.api.v1.learning._enqueue_recalculate_skill_vector_job", AsyncMock(return_value="job_recalc_123")):
+
+            payload = {"status": "completed"}
+            response = client.patch(f"/api/v1/learning/roadmap-item/{item_id}", json=payload, headers=headers)
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["item"]["status"] == "completed"
+            assert data["job_id"] == "job_recalc_123"
     finally:
         app.dependency_overrides.clear()

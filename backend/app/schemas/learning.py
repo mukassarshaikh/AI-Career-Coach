@@ -3,10 +3,17 @@ Learning Intelligence Pydantic schemas for request/response serialization.
 """
 
 from datetime import datetime
+from enum import Enum
 from typing import List, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
+
+
+class RoadmapItemStatusEnum(str, Enum):
+    NOT_STARTED = "not_started"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
 
 
 class GenerateRoadmapRequest(BaseModel):
@@ -53,3 +60,17 @@ class RoadmapResponse(BaseModel):
     items: List[RoadmapItemResponse] = Field(default_factory=list, description="Sequenced list of roadmap items")
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class UpdateRoadmapItemRequest(BaseModel):
+    """Request payload to update a roadmap item's completion status."""
+
+    status: RoadmapItemStatusEnum = Field(..., description="New status: not_started, in_progress, completed")
+
+
+class RoadmapItemUpdateResponse(BaseModel):
+    """Response model when updating a roadmap item."""
+
+    item: RoadmapItemResponse
+    job_id: Optional[str] = Field(None, description="Background job ID if recalculation was enqueued")
+    message: str = Field(..., description="Status message")

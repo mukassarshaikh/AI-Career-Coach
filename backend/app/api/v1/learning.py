@@ -3,9 +3,10 @@ Learning Intelligence API routes — /api/v1/learning/*
 
 Endpoints:
   - POST /api/v1/learning/roadmap: Generate a new roadmap from a skill_gap_report_id (async Arq job).
+  - GET /api/v1/learning/roadmap: Get active roadmap for authenticated user without requiring ID.
   - GET /api/v1/learning/roadmap/{id}: Get full roadmap details with sequenced items.
   - POST /api/v1/learning/roadmap/{id}/regenerate: Re-trigger roadmap generation for an existing roadmap.
-  - PATCH /api/v1/learning/roadmap-item/{id}: Stub route for marking item complete (returns 501 Not Implemented).
+  - PATCH /api/v1/learning/roadmap-item/{id}: Update item status (triggers recalculate_skill_vector when completed).
 """
 
 import logging
@@ -23,7 +24,11 @@ from app.models.user import User
 from app.schemas.learning import (
     GenerateRoadmapRequest,
     GenerateRoadmapResponse,
+    RoadmapItemResponse,
+    RoadmapItemStatusEnum,
+    RoadmapItemUpdateResponse,
     RoadmapResponse,
+    UpdateRoadmapItemRequest,
 )
 from app.services import learning_service
 
@@ -45,6 +50,21 @@ async def _enqueue_generate_roadmap_job(skill_gap_report_id: UUID, user_id: UUID
             f"Redis connection failed during generate_roadmap enqueue ({exc}). Using synthetic job_id."
         )
         return f"job_roadmap_{skill_gap_report_id}"
+
+
+async def _enqueue_recalculate_skill_vector_job(user_id: UUID, target_role: str) -> str:
+    """Helper function to enqueue recalculate_skill_vector job to Arq via Redis."""
+    try:
+        redis = await create_pool(RedisSettings.from_dsn(settings.redis_url))
+        job = await redis.enqueue_job("recalculate_skill_vector", str(user_id), target_role)
+        job_id = job.job_id if job else f"job_recalc_{user_id}"
+        await redis.close()
+        return job_id
+    except Exception as exc:
+        logger.warning(
+            f"Redis connection failed during recalculate_skill_vector enqueue ({exc}). Using synthetic job_id."
+        )
+        return f"job_recalc_{user_id}"
 
 
 @router.post(
@@ -78,13 +98,40 @@ async def generate_roadmap_endpoint(
 
 
 @router.get(
+    "/roadmap",
+    response_model=RoadmapResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Get current active roadmap",
+    description="Fetches the current active Roadmap for the authenticated user without requiring a roadmap_id parameter.",
+)
+async def get_active_roadmap_endpoint(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> RoadmapResponse:
+    """
+    Returns the user's current active roadmap and its sequenced learning items.
+    """
+    roadmap = await learning_service.get_active_roadmap_by_user_id(
+        db=db,
+        user_id=current_user.id,
+    )
+    if not roadmap:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No active roadmap found. Generate one from your skill gap report.",
+        )
+
+    return RoadmapResponse.model_validate(roadmap)
+
+
+@router.get(
     "/roadmap/{id}",
     response_model=RoadmapResponse,
     status_code=status.HTTP_200_OK,
-    summary="Get roadmap details",
-    description="Fetches a Roadmap and all associated items ordered by sequence_order.",
+    summary="Get roadmap details by ID",
+    description="Fetches a specific Roadmap by ID and all associated items ordered by sequence_order.",
 )
-async def get_roadmap_endpoint(
+async def get_roadmap_by_id_endpoint(
     id: UUID,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -149,18 +196,48 @@ async def regenerate_roadmap_endpoint(
 
 @router.patch(
     "/roadmap-item/{id}",
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
-    summary="Mark roadmap item complete (stub)",
-    description="Stub route for item completion tracking. Returns 501 Not Implemented until the recalculate_skill_vector feature is introduced.",
+    response_model=RoadmapItemUpdateResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Update roadmap item status",
+    description="Updates a roadmap item's status (not_started, in_progress, completed). Automatically enqueues recalculate_skill_vector when completed.",
 )
-async def mark_roadmap_item_complete_stub(
+async def update_roadmap_item_status_endpoint(
     id: UUID,
+    body: UpdateRoadmapItemRequest,
     current_user: User = Depends(get_current_user),
-) -> None:
+    db: AsyncSession = Depends(get_db),
+) -> RoadmapItemUpdateResponse:
     """
-    Stub endpoint returning 501 Not Implemented per Phase 2 spec.
+    Updates roadmap item completion status. Performs user ownership validation.
+    If marked completed, enqueues background skill vector recalculation.
     """
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Item completion tracking coming in the next release",
+    res = await learning_service.update_roadmap_item_status(
+        db=db,
+        item_id=id,
+        user_id=current_user.id,
+        new_status=body.status.value,
+    )
+    if not res:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Roadmap item not found.",
+        )
+
+    updated_item, target_role = res
+    job_id = None
+
+    if body.status == RoadmapItemStatusEnum.COMPLETED and target_role:
+        job_id = await _enqueue_recalculate_skill_vector_job(
+            user_id=current_user.id,
+            target_role=target_role,
+        )
+        msg = "Roadmap item marked complete; background skill vector recalculation enqueued."
+    else:
+        msg = f"Roadmap item status updated to '{body.status.value}'."
+
+    item_resp = RoadmapItemResponse.model_validate(updated_item)
+    return RoadmapItemUpdateResponse(
+        item=item_resp,
+        job_id=job_id,
+        message=msg,
     )

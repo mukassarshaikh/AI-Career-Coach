@@ -1,16 +1,18 @@
 """
-learning_service.py — Business logic for Learning Intelligence (roadmap generation & retrieval).
+learning_service.py — Business logic for Learning Intelligence (roadmap generation, item completion, & retrieval).
 
 Responsibilities:
   - Generate sequenced roadmap items from a skill gap report via LLM.
   - Archive any existing active roadmap for the user (only 1 active roadmap per user at a time).
   - Create and save new Roadmap + RoadmapItem rows in Postgres.
-  - Fetch full roadmaps with ordered items.
+  - Fetch full roadmaps with ordered items (by ID or active user status).
+  - Update roadmap item status with strict user ownership validation and completed_at timestamps.
 """
 
 import logging
 import uuid
-from typing import Any, Dict, List, Optional
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional, Tuple
 from uuid import UUID
 
 from sqlalchemy import select, update
@@ -149,3 +151,76 @@ async def get_roadmap_by_id(
         roadmap.items.sort(key=lambda x: x.sequence_order)
 
     return roadmap
+
+
+async def get_active_roadmap_by_user_id(
+    db: AsyncSession,
+    user_id: UUID,
+) -> Optional[Roadmap]:
+    """
+    Fetches the current active Roadmap for the specified user with all items eager-loaded.
+    """
+    stmt = (
+        select(Roadmap)
+        .where(Roadmap.user_id == user_id, Roadmap.status == "active")
+        .options(selectinload(Roadmap.items))
+        .order_by(Roadmap.created_at.desc())
+    )
+    result = await db.execute(stmt)
+    roadmap = result.scalar_one_or_none()
+
+    if roadmap and roadmap.items:
+        roadmap.items.sort(key=lambda x: x.sequence_order)
+
+    return roadmap
+
+
+async def update_roadmap_item_status(
+    db: AsyncSession,
+    item_id: UUID,
+    user_id: UUID,
+    new_status: str,
+) -> Optional[Tuple[RoadmapItem, Optional[str]]]:
+    """
+    Updates the status of a RoadmapItem after performing a mandatory ownership check
+    (joins through Roadmap to verify Roadmap.user_id == user_id).
+
+    If new_status is 'completed', sets completed_at to current UTC time. Otherwise sets completed_at to None.
+    If new_status is 'completed', also retrieves the target_role from the underlying SkillGapReport
+    to allow background recalculation.
+
+    Returns:
+        Tuple of (updated RoadmapItem, target_role) or None if item not found / unauthorized.
+    """
+    # Query item joined with its parent Roadmap
+    stmt = (
+        select(RoadmapItem, Roadmap)
+        .join(Roadmap, RoadmapItem.roadmap_id == Roadmap.id)
+        .where(RoadmapItem.id == item_id, Roadmap.user_id == user_id)
+    )
+    result = await db.execute(stmt)
+    row = result.first()
+
+    if not row:
+        logger.warning(f"RoadmapItem {item_id} not found for user_id={user_id} (ownership check failed).")
+        return None
+
+    item, roadmap = row
+
+    item.status = new_status
+    if new_status == "completed":
+        item.completed_at = datetime.now(timezone.utc)
+    else:
+        item.completed_at = None
+
+    target_role = None
+    if new_status == "completed" and roadmap.skill_gap_report_id:
+        # Fetch target_role from SkillGapReport
+        gap_stmt = select(SkillGapReport.target_role).where(SkillGapReport.id == roadmap.skill_gap_report_id)
+        gap_res = await db.execute(gap_stmt)
+        target_role = gap_res.scalar_one_or_none()
+
+    await db.commit()
+    await db.refresh(item)
+
+    return item, target_role

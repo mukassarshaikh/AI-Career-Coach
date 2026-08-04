@@ -60,6 +60,7 @@ async def test_analyze_keywords_llm_logging():
     }
 
     mock_db = AsyncMock()
+    mock_db.add = MagicMock()
 
     with patch("app.services.llm_service._call_groq_with_retry", AsyncMock(return_value=json.dumps(dummy_llm_json))):
         user_id = uuid.uuid4()
@@ -105,6 +106,7 @@ async def test_analyze_keywords_job_fails_when_no_prior_scoring_report():
     )
 
     mock_db = AsyncMock()
+    mock_db.add = MagicMock()
 
     class DummyAsyncSessionContext:
         async def __aenter__(self):
@@ -161,6 +163,7 @@ async def test_analyze_keywords_job_success_data_modeling_decision():
     )
 
     mock_db = AsyncMock()
+    mock_db.add = MagicMock()
 
     class DummyAsyncSessionContext:
         async def __aenter__(self):

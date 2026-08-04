@@ -108,6 +108,7 @@ async def test_structure_resume_llm_success():
     ]
 
     mock_db = AsyncMock()
+    mock_db.add = MagicMock()
 
     mock_groq_client = MagicMock()
     mock_groq_client.chat.completions.create = AsyncMock(return_value=mock_chat_completion)
@@ -149,6 +150,7 @@ async def test_structure_resume_groq_rate_limit_retry():
     )
 
     mock_db = AsyncMock()
+    mock_db.add = MagicMock()
 
     mock_groq_client = MagicMock()
     mock_groq_client.chat.completions.create = AsyncMock(

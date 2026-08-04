@@ -57,6 +57,7 @@ async def test_score_resume_ats_and_grammar_logging():
     }
 
     mock_db = AsyncMock()
+    mock_db.add = MagicMock()
 
     with patch("app.services.llm_service._call_groq_with_retry", AsyncMock(side_effect=[
         json.dumps(dummy_ats),

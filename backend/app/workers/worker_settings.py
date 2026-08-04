@@ -16,6 +16,7 @@ from app.workers.jobs.compute_skill_gap import compute_skill_gap
 from app.workers.jobs.generate_roadmap import generate_roadmap
 from app.workers.jobs.generate_skill_vector import generate_skill_vector
 from app.workers.jobs.parse_resume import parse_resume
+from app.workers.jobs.recalculate_skill_vector import recalculate_skill_vector
 from app.workers.jobs.score_resume import score_resume
 
 
@@ -35,7 +36,7 @@ async def shutdown(ctx: dict):
 class WorkerSettings:
     """
     Arq WorkerSettings.
-    Registers all Phase 1 and Phase 2 job functions (`parse_resume`, `score_resume`, `analyze_keywords`, `generate_skill_vector`, `compute_skill_gap`, `generate_roadmap`).
+    Registers all Phase 1 and Phase 2 job functions (`parse_resume`, `score_resume`, `analyze_keywords`, `generate_skill_vector`, `compute_skill_gap`, `generate_roadmap`, `recalculate_skill_vector`).
     """
     functions = [
         parse_resume,
@@ -44,7 +45,9 @@ class WorkerSettings:
         generate_skill_vector,
         compute_skill_gap,
         generate_roadmap,
+        recalculate_skill_vector,
     ]
+
 
     on_startup = startup
     on_shutdown = shutdown
