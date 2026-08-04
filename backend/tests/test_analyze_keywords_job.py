@@ -2,13 +2,14 @@
 Pytest integration test suite for analyze_keywords Arq job, Job Description submission, keyword gap analysis, and report resolution.
 
 Run with:
-    pytest tests/test_analyze_keywords_job.py -v
+    python -m pytest tests/test_analyze_keywords_job.py -v
 """
 
 import json
 import uuid
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
+from uuid import UUID
 
 import pytest
 from fastapi.testclient import TestClient

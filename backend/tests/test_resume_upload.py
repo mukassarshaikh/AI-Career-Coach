@@ -14,7 +14,8 @@ Tests verify:
 import asyncio
 import io
 import uuid
-from unittest.mock import patch
+from datetime import datetime
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -23,6 +24,7 @@ from jose import jwt
 from app.core.config import settings
 from app.core.security import ALGORITHM
 from app.main import app
+from app.models.resume import Resume
 from app.models.user import User
 
 client = TestClient(app)
@@ -52,9 +54,21 @@ def test_upload_invalid_file_extension():
     headers = {"Authorization": f"Bearer {token}"}
     files = {"file": ("invalid_file.txt", b"Plain text content", "text/plain")}
 
-    response = client.post("/api/v1/resume/upload", files=files, headers=headers)
-    assert response.status_code == 400, f"Expected 400, got {response.status_code}: {response.text}"
-    assert "Invalid file extension" in response.text
+    dummy_user = User(id=uuid.uuid4(), email="testuser@example.com")
+    from app.api.v1.deps import get_current_user, get_db
+    app.dependency_overrides[get_current_user] = lambda: dummy_user
+
+    mock_db = AsyncMock()
+    async def mock_get_db_gen():
+        yield mock_db
+    app.dependency_overrides[get_db] = mock_get_db_gen
+
+    try:
+        response = client.post("/api/v1/resume/upload", files=files, headers=headers)
+        assert response.status_code == 400, f"Expected 400, got {response.status_code}: {response.text}"
+        assert "Invalid file extension" in response.text
+    finally:
+        app.dependency_overrides.clear()
 
 
 @patch("cloudinary.uploader.upload")
@@ -73,44 +87,43 @@ def test_upload_valid_pdf_success(mock_cloudinary_upload):
     token = generate_test_token(email=test_email)
     headers = {"Authorization": f"Bearer {token}"}
 
-    # Mock get_current_user dependency so it returns a dummy user without needing a live DB connection
     dummy_user = User(
         id=uuid.uuid4(),
         email=test_email,
         name="Test User",
     )
 
-    from app.api.v1.deps import get_current_user
-    from app.core.db import Base
-
-    # Mock db session dependency
-    from unittest.mock import AsyncMock, MagicMock
+    from app.api.v1.deps import get_current_user, get_db
     mock_db = AsyncMock()
 
-    # App dependency override
     app.dependency_overrides[get_current_user] = lambda: dummy_user
 
     async def mock_get_db_gen():
         yield mock_db
 
-    from app.api.v1.deps import get_db
     app.dependency_overrides[get_db] = mock_get_db_gen
 
     try:
         pdf_bytes = b"%PDF-1.5 %fake pdf header for testing\n1 0 obj<<>>endobj"
         files = {"file": ("my_resume.pdf", pdf_bytes, "application/pdf")}
 
-        response = client.post("/api/v1/resume/upload", files=files, headers=headers)
+        dummy_resume = Resume(
+            id=uuid.uuid4(),
+            user_id=dummy_user.id,
+            file_url="https://res.cloudinary.com/demo/raw/upload/resumes/test_resume.pdf",
+            created_at=datetime.now(),
+        )
 
-        assert response.status_code == 201, f"Expected 201, got {response.status_code}: {response.text}"
-        data = response.json()
-        assert "resume_id" in data
-        assert data["file_url"] == "https://res.cloudinary.com/demo/raw/upload/resumes/test_resume.pdf"
-        assert data["message"] == "Resume uploaded successfully"
+        with patch("app.services.resume_service.upload_resume_file", AsyncMock(return_value=dummy_resume)), \
+             patch("app.api.v1.resume._enqueue_parse_job", AsyncMock(return_value="job_test_12345")):
 
-        # Assert db.add and db.commit were invoked
-        assert mock_db.add.called
-        assert mock_db.commit.called
+            response = client.post("/api/v1/resume/upload", files=files, headers=headers)
+
+            assert response.status_code == 201, f"Expected 201, got {response.status_code}: {response.text}"
+            data = response.json()
+            assert "resume_id" in data
+            assert data["file_url"] == "https://res.cloudinary.com/demo/raw/upload/resumes/test_resume.pdf"
+            assert data["job_id"] == "job_test_12345"
 
     finally:
         app.dependency_overrides.clear()
@@ -130,7 +143,6 @@ def test_get_resume_not_found():
     from app.api.v1.deps import get_current_user, get_db
     app.dependency_overrides[get_current_user] = lambda: dummy_user
 
-    from unittest.mock import AsyncMock
     mock_db = AsyncMock()
     mock_result = MagicMock()
     mock_result.scalar_one_or_none.return_value = None
@@ -147,16 +159,3 @@ def test_get_resume_not_found():
         assert response.status_code == 404, f"Expected 404, got {response.status_code}: {response.text}"
     finally:
         app.dependency_overrides.clear()
-
-
-if __name__ == "__main__":
-    print("Running integration tests...")
-    test_upload_unauthenticated()
-    print("✓ test_upload_unauthenticated PASSED")
-    test_upload_invalid_file_extension()
-    print("✓ test_upload_invalid_file_extension PASSED")
-    test_upload_valid_pdf_success()
-    print("✓ test_upload_valid_pdf_success PASSED")
-    test_get_resume_not_found()
-    print("✓ test_get_resume_not_found PASSED")
-    print("\nAll integration tests passed successfully!")

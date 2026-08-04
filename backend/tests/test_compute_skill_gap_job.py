@@ -2,13 +2,13 @@
 Pytest integration test suite for compute_skill_gap Arq job, ivfflat migration, skill gap ranking, and API routes (POST, GET, refresh).
 
 Run with:
-    pytest tests/test_compute_skill_gap_job.py -v
+    python -m pytest tests/test_compute_skill_gap_job.py -v
 """
 
 import os
 import uuid
 from datetime import datetime, timedelta
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -71,10 +71,11 @@ async def test_compute_skill_gap_ranking_and_missing_skills():
     ]
 
     mock_db = AsyncMock()
+    mock_db.add = MagicMock()
 
     with patch("app.services.skill_service.get_skill_vector_by_user_id", AsyncMock(return_value=mock_skill_vector)):
         # Mock database query returning market references
-        mock_result = AsyncMock()
+        mock_result = MagicMock()
         mock_result.scalars.return_value.all.return_value = mock_market_refs
         mock_db.execute = AsyncMock(return_value=mock_result)
 
@@ -103,6 +104,7 @@ async def test_compute_skill_gap_job_fails_when_no_skill_vector():
     """Verify compute_skill_gap job fails cleanly if candidate has no skill vector."""
     user_id = str(uuid.uuid4())
     mock_db = AsyncMock()
+    mock_db.add = MagicMock()
 
     class DummyAsyncSessionContext:
         async def __aenter__(self):
@@ -134,22 +136,24 @@ def test_post_gap_report_route():
     app.dependency_overrides[get_current_user] = lambda: dummy_user
 
     mock_db = AsyncMock()
+    mock_db.add = MagicMock()
     async def mock_get_db_gen():
         yield mock_db
     app.dependency_overrides[get_db] = mock_get_db_gen
 
-    with patch("app.services.skill_service.get_skill_vector_by_user_id", AsyncMock(return_value=dummy_vector)), \
-         patch("app.api.v1.skill._enqueue_compute_gap_job", AsyncMock(return_value="job_gap_888")):
+    try:
+        with patch("app.services.skill_service.get_skill_vector_by_user_id", AsyncMock(return_value=dummy_vector)), \
+             patch("app.api.v1.skill._enqueue_compute_gap_job", AsyncMock(return_value="job_gap_888")):
 
-        payload = {"target_role": "Backend Engineer"}
-        response = client.post("/api/v1/skill/gap-report", json=payload, headers=headers)
+            payload = {"target_role": "Backend Engineer"}
+            response = client.post("/api/v1/skill/gap-report", json=payload, headers=headers)
 
-        assert response.status_code == 202
-        data = response.json()
-        assert data["target_role"] == "Backend Engineer"
-        assert data["job_id"] == "job_gap_888"
-
-    app.dependency_overrides.clear()
+            assert response.status_code == 202
+            data = response.json()
+            assert data["target_role"] == "Backend Engineer"
+            assert data["job_id"] == "job_gap_888"
+    finally:
+        app.dependency_overrides.clear()
 
 
 def test_get_gap_report_route_returns_latest():
@@ -173,19 +177,21 @@ def test_get_gap_report_route_returns_latest():
     app.dependency_overrides[get_current_user] = lambda: dummy_user
 
     mock_db = AsyncMock()
+    mock_db.add = MagicMock()
     async def mock_get_db_gen():
         yield mock_db
     app.dependency_overrides[get_db] = mock_get_db_gen
 
-    with patch("app.services.skill_service.get_latest_skill_gap_report", AsyncMock(return_value=latest_report)):
-        response = client.get("/api/v1/skill/gap-report", headers=headers)
+    try:
+        with patch("app.services.skill_service.get_latest_skill_gap_report", AsyncMock(return_value=latest_report)):
+            response = client.get("/api/v1/skill/gap-report", headers=headers)
 
-        assert response.status_code == 200
-        data = response.json()
-        assert data["target_role"] == "Backend Engineer"
-        assert data["missing_skills"][0]["skill"] == "Docker"
-
-    app.dependency_overrides.clear()
+            assert response.status_code == 200
+            data = response.json()
+            assert data["target_role"] == "Backend Engineer"
+            assert data["missing_skills"][0]["skill"] == "Docker"
+    finally:
+        app.dependency_overrides.clear()
 
 
 def test_post_gap_report_refresh_route_reuses_logic():
@@ -200,19 +206,21 @@ def test_post_gap_report_refresh_route_reuses_logic():
     app.dependency_overrides[get_current_user] = lambda: dummy_user
 
     mock_db = AsyncMock()
+    mock_db.add = MagicMock()
     async def mock_get_db_gen():
         yield mock_db
     app.dependency_overrides[get_db] = mock_get_db_gen
 
-    with patch("app.services.skill_service.get_skill_vector_by_user_id", AsyncMock(return_value=dummy_vector)), \
-         patch("app.api.v1.skill._enqueue_compute_gap_job", AsyncMock(return_value="job_gap_refresh_999")):
+    try:
+        with patch("app.services.skill_service.get_skill_vector_by_user_id", AsyncMock(return_value=dummy_vector)), \
+             patch("app.api.v1.skill._enqueue_compute_gap_job", AsyncMock(return_value="job_gap_refresh_999")):
 
-        payload = {"target_role": "Backend Engineer"}
-        response = client.post("/api/v1/skill/gap-report/refresh", json=payload, headers=headers)
+            payload = {"target_role": "Backend Engineer"}
+            response = client.post("/api/v1/skill/gap-report/refresh", json=payload, headers=headers)
 
-        assert response.status_code == 202
-        data = response.json()
-        assert data["target_role"] == "Backend Engineer"
-        assert data["job_id"] == "job_gap_refresh_999"
-
-    app.dependency_overrides.clear()
+            assert response.status_code == 202
+            data = response.json()
+            assert data["target_role"] == "Backend Engineer"
+            assert data["job_id"] == "job_gap_refresh_999"
+    finally:
+        app.dependency_overrides.clear()

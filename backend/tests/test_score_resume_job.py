@@ -2,13 +2,14 @@
 Pytest integration test suite for score_resume Arq job, ATS evaluation, grammar audit, and report API endpoints.
 
 Run with:
-    pytest tests/test_score_resume_job.py -v
+    python -m pytest tests/test_score_resume_job.py -v
 """
 
 import json
 import uuid
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
+from uuid import UUID
 
 import pytest
 from fastapi.testclient import TestClient
@@ -179,16 +180,17 @@ def test_post_score_resume_route():
         yield mock_db
     app.dependency_overrides[get_db] = mock_get_db_gen
 
-    with patch("app.services.resume_service.get_resume_by_id", AsyncMock(return_value=dummy_resume)), \
-         patch("app.api.v1.resume._enqueue_score_job", AsyncMock(return_value="job_score_999")):
+    try:
+        with patch("app.services.resume_service.get_resume_by_id", AsyncMock(return_value=dummy_resume)), \
+             patch("app.api.v1.resume._enqueue_score_job", AsyncMock(return_value="job_score_999")):
 
-        response = client.post(f"/api/v1/resume/{dummy_resume.id}/score", headers=headers)
-        assert response.status_code == 202
-        data = response.json()
-        assert data["job_id"] == "job_score_999"
-        assert data["resume_id"] == str(dummy_resume.id)
-
-    app.dependency_overrides.clear()
+            response = client.post(f"/api/v1/resume/{dummy_resume.id}/score", headers=headers)
+            assert response.status_code == 202
+            data = response.json()
+            assert data["job_id"] == "job_score_999"
+            assert data["resume_id"] == str(dummy_resume.id)
+    finally:
+        app.dependency_overrides.clear()
 
 
 def test_get_resume_report_route():
@@ -217,13 +219,14 @@ def test_get_resume_report_route():
         yield mock_db
     app.dependency_overrides[get_db] = mock_get_db_gen
 
-    with patch("app.services.resume_service.get_latest_resume_report", AsyncMock(return_value=dummy_report)):
-        response = client.get(f"/api/v1/resume/{resume_id}/report", headers=headers)
-        assert response.status_code == 200
-        data = response.json()
-        assert data["resume_id"] == str(resume_id)
-        assert data["ats_breakdown"]["overall_score"] == 85
-        assert data["keyword_gaps"] is None
-        assert data["action_items"] is None
-
-    app.dependency_overrides.clear()
+    try:
+        with patch("app.services.resume_service.get_latest_resume_report", AsyncMock(return_value=dummy_report)):
+            response = client.get(f"/api/v1/resume/{resume_id}/report", headers=headers)
+            assert response.status_code == 200
+            data = response.json()
+            assert data["resume_id"] == str(resume_id)
+            assert data["ats_breakdown"]["overall_score"] == 85
+            assert data["keyword_gaps"] is None
+            assert data["action_items"] is None
+    finally:
+        app.dependency_overrides.clear()

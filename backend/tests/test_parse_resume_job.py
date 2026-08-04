@@ -2,13 +2,15 @@
 Pytest integration test suite for parse_resume Arq job, text extraction, LLM structuring, and job polling.
 
 Run with:
-    pytest tests/test_parse_resume_job.py -v
+    python -m pytest tests/test_parse_resume_job.py -v
 """
 
 import io
 import json
 import uuid
+from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
+from uuid import UUID
 
 import docx
 import pypdf
@@ -42,12 +44,10 @@ def test_extract_text_from_pdf():
     """Verify text extraction from in-memory PDF file bytes using pypdf."""
     writer = pypdf.PdfWriter()
     writer.add_blank_page(width=100, height=100)
-    # Write PDF bytes with actual text
     pdf_buffer = io.BytesIO()
     writer.write(pdf_buffer)
     pdf_bytes = pdf_buffer.getvalue()
 
-    # Even for minimal/blank pdf, extract_text_from_bytes should process without error
     extracted = resume_service.extract_text_from_bytes(pdf_bytes, "my_resume.pdf")
     assert isinstance(extracted, str)
 
@@ -109,9 +109,10 @@ async def test_structure_resume_llm_success():
 
     mock_db = AsyncMock()
 
-    with patch("groq.AsyncGroq.chat") as mock_groq_chat:
-        mock_groq_chat.completions.create = AsyncMock(return_value=mock_chat_completion)
+    mock_groq_client = MagicMock()
+    mock_groq_client.chat.completions.create = AsyncMock(return_value=mock_chat_completion)
 
+    with patch("app.services.llm_service._get_groq_client", return_value=mock_groq_client):
         result = await llm_service.structure_resume(
             text="Resume content string",
             user_id=uuid.uuid4(),
@@ -149,11 +150,13 @@ async def test_structure_resume_groq_rate_limit_retry():
 
     mock_db = AsyncMock()
 
-    with patch("groq.AsyncGroq.chat") as mock_groq_chat, patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
-        # First 2 calls fail with 429, 3rd call succeeds
-        mock_groq_chat.completions.create = AsyncMock(
-            side_effect=[rate_limit_err, rate_limit_err, mock_chat_completion]
-        )
+    mock_groq_client = MagicMock()
+    mock_groq_client.chat.completions.create = AsyncMock(
+        side_effect=[rate_limit_err, rate_limit_err, mock_chat_completion]
+    )
+
+    with patch("app.services.llm_service._get_groq_client", return_value=mock_groq_client), \
+         patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
 
         result = await llm_service.structure_resume(
             text="Test text",
@@ -163,7 +166,7 @@ async def test_structure_resume_groq_rate_limit_retry():
         )
 
         assert result == dummy_llm_json
-        assert mock_groq_chat.completions.create.call_count == 3
+        assert mock_groq_client.chat.completions.create.call_count == 3
         assert mock_sleep.call_count == 2
 
 
@@ -186,7 +189,6 @@ async def test_parse_resume_worker_job():
 
     mock_db = AsyncMock()
 
-    # Helper session context manager mock
     class DummyAsyncSessionContext:
         async def __aenter__(self):
             return mock_db
@@ -229,6 +231,7 @@ def test_upload_enqueues_parse_job_and_returns_job_id():
         id=uuid.uuid4(),
         user_id=dummy_user.id,
         file_url="https://res.cloudinary.com/demo/raw/upload/resumes/test.pdf",
+        created_at=datetime.now(),
     )
 
     from app.api.v1.deps import get_current_user, get_db
@@ -240,18 +243,19 @@ def test_upload_enqueues_parse_job_and_returns_job_id():
 
     app.dependency_overrides[get_db] = mock_get_db_gen
 
-    with patch("app.services.resume_service.upload_resume_file", AsyncMock(return_value=dummy_resume)), \
-         patch("app.api.v1.resume._enqueue_parse_job", AsyncMock(return_value="job_test_12345")):
+    try:
+        with patch("app.services.resume_service.upload_resume_file", AsyncMock(return_value=dummy_resume)), \
+             patch("app.api.v1.resume._enqueue_parse_job", AsyncMock(return_value="job_test_12345")):
 
-        files = {"file": ("resume.pdf", b"%PDF-1.4 dummy", "application/pdf")}
-        response = client.post("/api/v1/resume/upload", files=files, headers=headers)
+            files = {"file": ("resume.pdf", b"%PDF-1.4 dummy", "application/pdf")}
+            response = client.post("/api/v1/resume/upload", files=files, headers=headers)
 
-        assert response.status_code == 201
-        data = response.json()
-        assert data["job_id"] == "job_test_12345"
-        assert data["resume_id"] == str(dummy_resume.id)
-
-    app.dependency_overrides.clear()
+            assert response.status_code == 201
+            data = response.json()
+            assert data["job_id"] == "job_test_12345"
+            assert data["resume_id"] == str(dummy_resume.id)
+    finally:
+        app.dependency_overrides.clear()
 
 
 def test_get_job_status_polling_route():

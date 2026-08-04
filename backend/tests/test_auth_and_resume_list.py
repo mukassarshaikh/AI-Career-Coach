@@ -3,12 +3,12 @@ Pytest integration test suite for backend authentication endpoints (POST /auth/r
 and user resume listing endpoint (GET /resume).
 
 Run with:
-    pytest tests/test_auth_and_resume_list.py -v
+    python -m pytest tests/test_auth_and_resume_list.py -v
 """
 
 import uuid
 from datetime import datetime, timedelta
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -51,18 +51,36 @@ def test_password_hashing_and_verification():
 async def test_register_user_success():
     """Verify registration creates a new User in DB with hashed password and returns 201 Created."""
     mock_db = AsyncMock()
+    mock_db.add = MagicMock()
+
+    async def mock_refresh(obj):
+        if getattr(obj, "created_at", None) is None:
+            obj.created_at = datetime.now()
+        if getattr(obj, "id", None) is None:
+            obj.id = uuid.uuid4()
+
+    mock_db.refresh = AsyncMock(side_effect=mock_refresh)
 
     # Mock execute returning None (no duplicate email)
-    mock_result = AsyncMock()
+    mock_result = MagicMock()
     mock_result.scalar_one_or_none.return_value = None
     mock_db.execute = AsyncMock(return_value=mock_result)
 
-    payload = {"email": "newuser@example.com", "password": "MyPassword123!", "name": "New User"}
-    response = client.post("/api/v1/auth/register", json=payload)
+    from app.api.v1.deps import get_db
+    async def mock_get_db_gen():
+        yield mock_db
+    app.dependency_overrides[get_db] = mock_get_db_gen
 
-    # Note: DB call mocked, response status 201 when unit testing
-    with patch("app.api.v1.deps.get_db", AsyncMock(return_value=mock_db)):
-        pass
+    try:
+        payload = {"email": "newuser@example.com", "password": "MyPassword123!", "name": "New User"}
+        response = client.post("/api/v1/auth/register", json=payload)
+        assert response.status_code == 201
+        data = response.json()
+        assert data["email"] == "newuser@example.com"
+        assert data["name"] == "New User"
+        assert "access_token" in data
+    finally:
+        app.dependency_overrides.clear()
 
 
 @pytest.mark.asyncio
@@ -75,7 +93,8 @@ async def test_register_duplicate_email_returns_409():
     )
 
     mock_db = AsyncMock()
-    mock_result = AsyncMock()
+    mock_db.add = MagicMock()
+    mock_result = MagicMock()
     mock_result.scalar_one_or_none.return_value = existing_user
     mock_db.execute = AsyncMock(return_value=mock_result)
 
@@ -84,13 +103,14 @@ async def test_register_duplicate_email_returns_409():
         yield mock_db
     app.dependency_overrides[get_db] = mock_get_db_gen
 
-    payload = {"email": "existing@example.com", "password": "password123"}
-    response = client.post("/api/v1/auth/register", json=payload)
+    try:
+        payload = {"email": "existing@example.com", "password": "password123"}
+        response = client.post("/api/v1/auth/register", json=payload)
 
-    assert response.status_code == 409
-    assert "already exists" in response.json()["detail"]
-
-    app.dependency_overrides.clear()
+        assert response.status_code == 409
+        assert "already exists" in response.json()["detail"]
+    finally:
+        app.dependency_overrides.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -109,7 +129,8 @@ async def test_login_user_success():
     )
 
     mock_db = AsyncMock()
-    mock_result = AsyncMock()
+    mock_db.add = MagicMock()
+    mock_result = MagicMock()
     mock_result.scalar_one_or_none.return_value = user
     mock_db.execute = AsyncMock(return_value=mock_result)
 
@@ -118,15 +139,16 @@ async def test_login_user_success():
         yield mock_db
     app.dependency_overrides[get_db] = mock_get_db_gen
 
-    payload = {"email": "login_user@example.com", "password": password}
-    response = client.post("/api/v1/auth/login", json=payload)
+    try:
+        payload = {"email": "login_user@example.com", "password": password}
+        response = client.post("/api/v1/auth/login", json=payload)
 
-    assert response.status_code == 200
-    data = response.json()
-    assert data["email"] == "login_user@example.com"
-    assert data["name"] == "Login User"
-
-    app.dependency_overrides.clear()
+        assert response.status_code == 200
+        data = response.json()
+        assert data["email"] == "login_user@example.com"
+        assert data["name"] == "Login User"
+    finally:
+        app.dependency_overrides.clear()
 
 
 @pytest.mark.asyncio
@@ -139,7 +161,8 @@ async def test_login_user_wrong_password_returns_401_generic():
     )
 
     mock_db = AsyncMock()
-    mock_result = AsyncMock()
+    mock_db.add = MagicMock()
+    mock_result = MagicMock()
     mock_result.scalar_one_or_none.return_value = user
     mock_db.execute = AsyncMock(return_value=mock_result)
 
@@ -148,20 +171,22 @@ async def test_login_user_wrong_password_returns_401_generic():
         yield mock_db
     app.dependency_overrides[get_db] = mock_get_db_gen
 
-    payload = {"email": "login_user@example.com", "password": "WrongPassword!"}
-    response = client.post("/api/v1/auth/login", json=payload)
+    try:
+        payload = {"email": "login_user@example.com", "password": "WrongPassword!"}
+        response = client.post("/api/v1/auth/login", json=payload)
 
-    assert response.status_code == 401
-    assert response.json()["detail"] == "Invalid email or password."
-
-    app.dependency_overrides.clear()
+        assert response.status_code == 401
+        assert response.json()["detail"] == "Invalid email or password."
+    finally:
+        app.dependency_overrides.clear()
 
 
 @pytest.mark.asyncio
 async def test_login_user_unknown_email_returns_401_generic():
     """Verify login with non-existent email returns identical 401 Unauthorized generic message."""
     mock_db = AsyncMock()
-    mock_result = AsyncMock()
+    mock_db.add = MagicMock()
+    mock_result = MagicMock()
     mock_result.scalar_one_or_none.return_value = None  # User not found
     mock_db.execute = AsyncMock(return_value=mock_result)
 
@@ -170,14 +195,14 @@ async def test_login_user_unknown_email_returns_401_generic():
         yield mock_db
     app.dependency_overrides[get_db] = mock_get_db_gen
 
-    payload = {"email": "nonexistent@example.com", "password": "SomePassword123!"}
-    response = client.post("/api/v1/auth/login", json=payload)
+    try:
+        payload = {"email": "nonexistent@example.com", "password": "SomePassword123!"}
+        response = client.post("/api/v1/auth/login", json=payload)
 
-    assert response.status_code == 401
-    # Confirm generic error prevents email enumeration
-    assert response.json()["detail"] == "Invalid email or password."
-
-    app.dependency_overrides.clear()
+        assert response.status_code == 401
+        assert response.json()["detail"] == "Invalid email or password."
+    finally:
+        app.dependency_overrides.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -213,17 +238,19 @@ async def test_list_user_resumes_returns_only_authenticated_user_resumes():
     app.dependency_overrides[get_current_user] = lambda: user_a
 
     mock_db = AsyncMock()
+    mock_db.add = MagicMock()
     async def mock_get_db_gen():
         yield mock_db
     app.dependency_overrides[get_db] = mock_get_db_gen
 
-    with patch("app.services.resume_service.list_user_resumes", AsyncMock(return_value=resumes_user_a)):
-        response = client.get("/api/v1/resume", headers=headers)
+    try:
+        with patch("app.services.resume_service.list_user_resumes", AsyncMock(return_value=resumes_user_a)):
+            response = client.get("/api/v1/resume", headers=headers)
 
-        assert response.status_code == 200
-        data = response.json()
-        assert len(data) == 2
-        assert data[0]["file_url"] == "https://res.cloudinary.com/test1.pdf"
-        assert data[1]["file_url"] == "https://res.cloudinary.com/test2.pdf"
-
-    app.dependency_overrides.clear()
+            assert response.status_code == 200
+            data = response.json()
+            assert len(data) == 2
+            assert data[0]["file_url"] == "https://res.cloudinary.com/test1.pdf"
+            assert data[1]["file_url"] == "https://res.cloudinary.com/test2.pdf"
+    finally:
+        app.dependency_overrides.clear()

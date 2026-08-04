@@ -2,10 +2,10 @@
 Pytest test suite for market_skill_reference seed script, starter dataset structure, 384-dim embeddings, and idempotency.
 
 Run with:
-    pytest tests/test_market_skill_reference_seed.py -v
+    python -m pytest tests/test_market_skill_reference_seed.py -v
 """
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from sqlalchemy import select
@@ -42,27 +42,24 @@ async def test_seed_market_skill_reference_execution_and_idempotency():
     seeded_records: dict[tuple[str, str], MarketSkillReference] = {}
     mock_db = AsyncMock()
 
-    # Mock DB query behavior for idempotent upsert check
-    async def mock_execute(stmt):
-        # Extract role_title and skill_name from WHERE clause if possible
-        mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = None
-        return mock_result
+    # Mock DB query behavior returning empty list on 1st run
+    mock_result_run1 = MagicMock()
+    mock_result_run1.scalars.return_value.all.return_value = []
+    mock_db.execute = AsyncMock(return_value=mock_result_run1)
 
-    from unittest.mock import MagicMock
-    mock_db.execute = AsyncMock(side_effect=mock_execute)
-
-    # Track objects added to db
+    # Track objects added to db via add_all
     added_objects = []
-    def mock_add(obj):
-        if isinstance(obj, MarketSkillReference):
-            added_objects.append(obj)
-            seeded_records[(obj.role_title, obj.skill_name)] = obj
 
-    mock_db.add = mock_add
+    def mock_add_all(objs):
+        for obj in objs:
+            if isinstance(obj, MarketSkillReference):
+                added_objects.append(obj)
+                seeded_records[(obj.role_title, obj.skill_name)] = obj
 
-    with patch("app.services.embedding_service.generate_embedding", return_value=[0.1] * 384):
-        # First Run
+    mock_db.add_all = mock_add_all
+
+    with patch("app.services.embedding_service.generate_embeddings_batch_async", AsyncMock(return_value=[[0.1] * 384] * len(STARTER_MARKET_SKILLS))):
+        # First Run — No existing records in DB
         count1 = await seed_market_skill_reference(mock_db)
         assert count1 == len(STARTER_MARKET_SKILLS)
         assert len(added_objects) == len(STARTER_MARKET_SKILLS)
@@ -76,13 +73,9 @@ async def test_seed_market_skill_reference_execution_and_idempotency():
 
         # Second Run — Mock existing records found in DB to test idempotency
         added_objects.clear()
-        async def mock_execute_run2(stmt):
-            # Simulate returning existing object for update
-            mock_res = MagicMock()
-            mock_res.scalar_one_or_none.return_value = sample_ref
-            return mock_res
-
-        mock_db.execute = AsyncMock(side_effect=mock_execute_run2)
+        mock_result_run2 = MagicMock()
+        mock_result_run2.scalars.return_value.all.return_value = list(seeded_records.values())
+        mock_db.execute = AsyncMock(return_value=mock_result_run2)
 
         count2 = await seed_market_skill_reference(mock_db)
         assert count2 == len(STARTER_MARKET_SKILLS)
