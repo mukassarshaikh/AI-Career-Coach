@@ -403,3 +403,94 @@ async def analyze_keywords_llm(
             "missing_keywords": [],
             "action_items": [],
         }
+
+
+# ---------------------------------------------------------------------------
+# Learning Roadmap Generation Prompts & Functions
+# ---------------------------------------------------------------------------
+GENERATE_ROADMAP_SYSTEM_PROMPT = """You are an expert technical curriculum designer and learning path architect AI.
+Your job is to take a ranked list of missing skills for a candidate aiming for a target career role, and construct a structured, step-by-step learning roadmap.
+
+For each missing skill, generate 2 to 4 learning items ordered logically by dependency and difficulty.
+Item types MUST be one of: "course", "article", "project", "milestone".
+Item difficulties MUST be one of: "beginner", "intermediate", "advanced".
+
+Do NOT fabricate real external URLs that may not exist. Use null for the `url` field or generate descriptive placeholder titles that clearly state the item's learning objective (e.g. "Complete official React documentation advanced patterns section").
+
+The JSON response MUST adhere strictly to this schema:
+{
+  "items": [
+    {
+      "skill_name": "Docker",
+      "type": "course",
+      "title": "Mastering Docker Containers & Microservices",
+      "description": "Comprehensive course covering Dockerfile syntax, container networking, multi-stage builds, and docker-compose.",
+      "url": null,
+      "sequence_order": 1,
+      "difficulty": "beginner"
+    },
+    {
+      "skill_name": "Docker",
+      "type": "project",
+      "title": "Containerize a Multi-Service FastAPI and Postgres Web App",
+      "description": "Hands-on project to package FastAPI backend, Postgres DB, and Redis queue with Docker Compose.",
+      "url": null,
+      "sequence_order": 2,
+      "difficulty": "intermediate"
+    }
+  ]
+}
+
+Return ONLY valid JSON matching this schema.
+"""
+
+GENERATE_ROADMAP_USER_PROMPT_TEMPLATE = """Generate a sequenced learning roadmap for a candidate targeting the role of '{target_role}'.
+
+--- MISSING SKILLS RANKED BY DEMAND WEIGHT ---
+{missing_skills_json}
+"""
+
+
+async def generate_roadmap_llm(
+    missing_skills: List[Dict[str, Any]],
+    target_role: str,
+    user_id: Optional[UUID] = None,
+    db: Optional[AsyncSession] = None,
+    max_retries: int = 3,
+) -> List[Dict[str, Any]]:
+    """
+    Calls Groq LLM to convert a list of missing skills into structured roadmap items.
+    Logs AI generation to `ai_generation_logs` with module='learning'.
+    """
+    user_prompt = GENERATE_ROADMAP_USER_PROMPT_TEMPLATE.format(
+        target_role=target_role or "Software Engineer",
+        missing_skills_json=json.dumps(missing_skills, indent=2),
+    )
+    full_prompt = f"{GENERATE_ROADMAP_SYSTEM_PROMPT}\n\n{user_prompt}"
+
+    response_text = await _call_groq_with_retry(
+        system_prompt=GENERATE_ROADMAP_SYSTEM_PROMPT,
+        user_prompt=user_prompt,
+        max_retries=max_retries,
+    )
+
+    await log_ai_generation(
+        module="learning",
+        prompt=full_prompt,
+        response=response_text,
+        model_used=settings.groq_model,
+        user_id=user_id,
+        db=db,
+    )
+
+    try:
+        data = json.loads(response_text)
+        if isinstance(data, dict) and "items" in data and isinstance(data["items"], list):
+            return data["items"]
+        elif isinstance(data, list):
+            return data
+        return []
+    except json.JSONDecodeError:
+        logger.error(f"Failed to parse roadmap LLM JSON response: {response_text}")
+        return []
+

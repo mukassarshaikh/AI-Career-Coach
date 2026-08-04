@@ -13,6 +13,7 @@ from arq.worker import run_worker
 from app.core.config import settings
 from app.workers.jobs.analyze_keywords import analyze_keywords
 from app.workers.jobs.compute_skill_gap import compute_skill_gap
+from app.workers.jobs.generate_roadmap import generate_roadmap
 from app.workers.jobs.generate_skill_vector import generate_skill_vector
 from app.workers.jobs.parse_resume import parse_resume
 from app.workers.jobs.score_resume import score_resume
@@ -34,7 +35,7 @@ async def shutdown(ctx: dict):
 class WorkerSettings:
     """
     Arq WorkerSettings.
-    Registers all Phase 1 job functions (`parse_resume`, `score_resume`, `analyze_keywords`, `generate_skill_vector`, `compute_skill_gap`).
+    Registers all Phase 1 and Phase 2 job functions (`parse_resume`, `score_resume`, `analyze_keywords`, `generate_skill_vector`, `compute_skill_gap`, `generate_roadmap`).
     """
     functions = [
         parse_resume,
@@ -42,7 +43,9 @@ class WorkerSettings:
         analyze_keywords,
         generate_skill_vector,
         compute_skill_gap,
+        generate_roadmap,
     ]
+
     on_startup = startup
     on_shutdown = shutdown
     redis_settings = RedisSettings.from_dsn(settings.redis_url)
