@@ -1,3 +1,2 @@
-// Placeholder barrel — skill components added in Phase 1
-// SkillGapRadarChart, MissingSkillsTable
-export {};
+export { SkillGapRadarChart } from "./SkillGapRadarChart";
+export { MissingSkillsTable } from "./MissingSkillsTable";

@@ -5,9 +5,9 @@ import type { JobStatusResponse } from "@/types/resume";
 
 /**
  * useJobStatus — Polls async background Arq job status via Redis.
- * Includes a maxDurationMs safeguard (default 60s) to prevent infinite polling if a worker halts.
+ * Includes a 90-second timeout safeguard (maxDurationMs) with retry capability to handle transient network issues.
  */
-export function useJobStatus(jobId: string | null, maxDurationMs: number = 120000) {
+export function useJobStatus(jobId: string | null, maxDurationMs: number = 90000) {
   const startTimeRef = useRef<number | null>(null);
   const [isTimedOut, setIsTimedOut] = useState(false);
 
@@ -25,6 +25,7 @@ export function useJobStatus(jobId: string | null, maxDurationMs: number = 12000
     queryKey: ["jobStatus", jobId],
     queryFn: () => getJobStatus(jobId!),
     enabled: !!jobId && !isTimedOut,
+    retry: 3,
     refetchInterval: (q) => {
       if (isTimedOut) return false;
       const data = q.state.data;
@@ -44,7 +45,7 @@ export function useJobStatus(jobId: string | null, maxDurationMs: number = 12000
       data: {
         job_id: jobId,
         status: "failed" as const,
-        result: { error: "Job processing timed out after 60 seconds." },
+        result: { error: "Job processing timed out after 90 seconds." },
       },
     };
   }

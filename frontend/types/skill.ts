@@ -1,34 +1,43 @@
 /**
- * Skill types — mirrors backend Pydantic schemas.
- * Filled out in Phase 1.
+ * Skill Intelligence TypeScript types — mirrors backend Pydantic schemas.
  */
 
-export interface SkillVector {
-  id: string;
-  userId: string;
-  resumeId?: string | null;
-  rawSkills?: SkillWithConfidence[] | null;
-  createdAt: string;
-  updatedAt: string;
+export interface GenerateSkillVectorRequest {
+  resume_id: string;
 }
 
-export interface SkillWithConfidence {
-  name: string;
-  confidence: number;
-  source: string;
+export interface GenerateSkillVectorResponse {
+  resume_id: string;
+  job_id: string;
+  message: string;
 }
 
-export interface SkillGapReport {
-  id: string;
-  userId: string;
-  skillVectorId: string;
-  targetRole: string;
-  missingSkills: MissingSkill[];
-  createdAt: string;
+export interface ComputeSkillGapRequest {
+  target_role: string;
 }
 
-export interface MissingSkill {
+export interface ComputeSkillGapResponse {
+  target_role: string;
+  job_id: string;
+  message: string;
+}
+
+export interface MissingSkillItem {
   skill: string;
-  demandWeight: number;
-  relevanceScore: number;
+  demand_weight: number;
+  importance: "high" | "medium" | "low" | string;
+  status: string;
 }
+
+export interface SkillGapReportResponse {
+  id: string;
+  user_id: string;
+  skill_vector_id: string;
+  target_role: string;
+  missing_skills: MissingSkillItem[];
+  created_at: string;
+}
+
+// Backward compatibility interfaces
+export type SkillGapReport = SkillGapReportResponse;
+export type MissingSkill = MissingSkillItem;
