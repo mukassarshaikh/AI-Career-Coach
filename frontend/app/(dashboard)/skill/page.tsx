@@ -34,19 +34,25 @@ export default function SkillPage() {
   const generateGapMutation = useGenerateSkillGapReport();
   const refreshGapMutation = useRefreshSkillGapReport();
 
-  // Poll current background job
-  const { data: jobStatus } = useJobStatus(activeJobId);
+  // Only poll background job status when there is an active job step explicitly initiated by user action
+  const currentPollingJobId = activeJobStep !== null ? activeJobId : null;
+  const { data: jobStatus } = useJobStatus(currentPollingJobId);
 
-  // Pre-fill target role if gap report exists
+  // Pre-fill target role if gap report exists and ensure no stale job polling on page mount
   useEffect(() => {
-    if (gapReport?.target_role && !targetRole) {
-      setTargetRole(gapReport.target_role);
+    if (gapReport) {
+      if (gapReport.target_role && activeJobStep === null) {
+        setTargetRole(gapReport.target_role);
+      }
+      if (activeJobStep === null && activeJobId !== null) {
+        setActiveJobId(null);
+      }
     }
-  }, [gapReport]);
+  }, [gapReport, activeJobStep, activeJobId]);
 
   // Handle Job Completion Flow State Machine
   useEffect(() => {
-    if (!jobStatus || !activeJobId) return;
+    if (!jobStatus || !currentPollingJobId || activeJobStep === null) return;
 
     if (jobStatus.status === "complete") {
       if (activeJobStep === "vector") {
@@ -84,8 +90,7 @@ export default function SkillPage() {
       setActiveJobId(null);
       setActiveJobStep(null);
     }
-  }, [jobStatus, activeJobId, activeJobStep, router]);
-
+  }, [jobStatus, currentPollingJobId, activeJobStep, targetRole, generateGapMutation, queryClient, refetchReport, router]);
 
   // Handle "Generate Skill Analysis" Action
   const handleGenerateAnalysis = async (e: React.FormEvent) => {
@@ -152,7 +157,7 @@ export default function SkillPage() {
     }
   };
 
-  const isJobRunning = !!activeJobId || activeJobStep !== null;
+  const isJobRunning = !!currentPollingJobId && activeJobStep !== null;
 
   return (
     <div className="max-w-7xl mx-auto space-y-8 pb-12">
@@ -293,3 +298,4 @@ export default function SkillPage() {
     </div>
   );
 }
+
