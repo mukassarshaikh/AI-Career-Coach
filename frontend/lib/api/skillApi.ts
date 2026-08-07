@@ -40,3 +40,10 @@ export async function getSkillGapReport(): Promise<SkillGapReportResponse> {
     method: "GET",
   });
 }
+
+export async function getAvailableRoles(): Promise<string[]> {
+  return fetchWithAuth<string[]>("/api/v1/skill/roles", {
+    method: "GET",
+  });
+}
+

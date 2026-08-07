@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   generateSkillGapReport,
   generateSkillVector,
+  getAvailableRoles,
   getSkillGapReport,
   refreshSkillGapReport,
 } from "@/lib/api/skillApi";
@@ -10,6 +11,14 @@ import type {
   GenerateSkillVectorResponse,
   SkillGapReportResponse,
 } from "@/types/skill";
+
+export function useAvailableRoles() {
+  return useQuery<string[]>({
+    queryKey: ["availableRoles"],
+    queryFn: getAvailableRoles,
+    staleTime: 1000 * 60 * 30,
+  });
+}
 
 export function useSkillGapReport() {
   return useQuery<SkillGapReportResponse>({
@@ -44,3 +53,4 @@ export function useRefreshSkillGapReport() {
     },
   });
 }
+

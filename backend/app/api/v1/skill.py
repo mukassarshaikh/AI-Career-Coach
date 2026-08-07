@@ -14,11 +14,13 @@ from uuid import UUID
 from arq import create_pool
 from arq.connections import RedisSettings
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.deps import get_current_user, get_db
 from app.core.config import settings
 from app.core.limiter import limiter
+from app.models.skill import MarketSkillReference
 from app.models.user import User
 from app.schemas.skill import (
     ComputeSkillGapRequest,
@@ -32,6 +34,31 @@ from app.services import resume_service, skill_service
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/skill", tags=["skill"])
+
+
+@router.get(
+    "/roles",
+    response_model=list[str],
+    status_code=status.HTTP_200_OK,
+    summary="Get available benchmark roles",
+    description="Returns distinct role titles from market skill references ordered alphabetically.",
+)
+async def get_available_roles(
+    db: AsyncSession = Depends(get_db),
+) -> list[str]:
+    """
+    Queries distinct role titles from market_skill_reference table.
+    No auth required as this is public benchmark reference data.
+    """
+    stmt = (
+        select(MarketSkillReference.role_title)
+        .distinct()
+        .order_by(MarketSkillReference.role_title)
+    )
+    result = await db.execute(stmt)
+    roles = result.scalars().all()
+    return list(roles)
+
 
 
 async def _enqueue_skill_vector_job(resume_id: UUID) -> str:
