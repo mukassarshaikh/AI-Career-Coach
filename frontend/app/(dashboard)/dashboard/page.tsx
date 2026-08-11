@@ -1,72 +1,250 @@
 "use client";
 
 /**
- * Dashboard page — consolidated summary view.
- * Restyled matching design_system.md (§1, §2, §3, §5).
+ * Dashboard page — 2x2 consolidated metrics summary grid per design_system.md (§3, §4, §5, §6 & §8).
+ * Integrates GET /api/v1/dashboard/summary verified backend contract.
  */
 
 import Link from "next/link";
-import { FileText, Target, BarChart2, Compass, Activity } from "lucide-react";
-import { useHealth } from "@/lib/hooks/useHealth";
+import { FileText, Target, Compass, MessageSquare, ArrowRight } from "lucide-react";
+import { useDashboardSummary } from "@/lib/hooks/useLearning";
+import { AtsScoreGauge } from "@/components/resume/AtsScoreGauge";
+import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
 
 export default function DashboardPage() {
-  const { data: health, isLoading, isError } = useHealth();
+  const { data: summary, isLoading, isError } = useDashboardSummary();
+
+  const resumeScore = summary?.resume_score ?? null;
+  const missingSkillsCount = summary?.missing_skills_count ?? 0;
+  const targetRole = summary?.target_role ?? null;
+  const completionPercentage = summary?.roadmap_completion_percentage ?? 0;
+  const completedItems = summary?.roadmap_completed_items ?? 0;
+  const totalItems = summary?.roadmap_total_items ?? 0;
+
+  // Recharts color constants (documented hex values for SVG elements unable to resolve CSS variables directly)
+  const BRASS_HEX = "#C89B3C"; // --color-brass
+  const LINE_HEX = "#DAD8CE"; // --color-line
+
+  const gaugeData = [
+    { name: "Completed", value: completionPercentage },
+    { name: "Remaining", value: Math.max(0, 100 - completionPercentage) },
+  ];
+
+  if (isLoading) {
+    return (
+      <div className="space-y-8 max-w-6xl mx-auto pb-16 animate-pulse">
+        <div className="space-y-2">
+          <div className="h-9 w-48 bg-line/40 rounded-md" />
+          <div className="h-5 w-80 bg-line/30 rounded-md" />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-64 rounded-xl border border-line bg-paper-raised p-8" />
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-8 max-w-5xl mx-auto pb-16">
-      <div className="space-y-1.5">
+    <div className="space-y-8 max-w-6xl mx-auto pb-16">
+      {/* Header */}
+      <div className="space-y-1">
         <h1 className="font-display text-display-lg tracking-tight text-ink">
           Dashboard
         </h1>
         <p className="font-body text-body text-ink-muted">
-          Your career progress and instrument data at a glance.
+          Your consolidated career progress, resume score, skill gaps, and learning trajectory.
         </p>
       </div>
 
-      {/* Backend health status indicator */}
-      <div className="rounded-xl border border-line bg-paper-raised p-4 flex items-center gap-3 shadow-sm">
-        <span
-          aria-hidden="true"
-          className={`w-2.5 h-2.5 rounded-full ${
-            isLoading
-              ? "bg-brass animate-pulse"
-              : isError
-              ? "bg-clay-alert"
-              : "bg-forest"
-          }`}
-        />
-        <span className="font-mono text-data font-medium text-ink flex items-center gap-2">
-          <Activity className="w-4 h-4 text-forest" />
-          <span>
-            {isLoading
-              ? "Connecting to backend service..."
-              : isError
-              ? "Backend service unreachable"
-              : health?.message ?? "Backend connected"}
-          </span>
-        </span>
-      </div>
-
-      {/* Module summary cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        {[
-          { label: "Resumes", value: "—", href: "/resume", icon: FileText },
-          { label: "ATS Score", value: "—", href: "/resume", icon: Target },
-          { label: "Skill Gaps", value: "—", href: "/skill", icon: BarChart2 },
-          { label: "Active Roadmaps", value: "—", href: "/learning", icon: Compass },
-        ].map(({ label, value, href, icon: Icon }) => (
-          <Link
-            key={label}
-            href={href}
-            className="rounded-xl border border-line bg-paper-raised p-6 hover:border-forest/40 transition-colors space-y-3 shadow-sm"
-          >
-            <div className="flex items-center justify-between">
-              <span className="font-body text-body-sm font-medium text-ink-muted">{label}</span>
-              <Icon className="w-5 h-5 text-forest" />
+      {/* 2x2 Summary Cards Grid per design_system.md §5 */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        
+        {/* Card 1: Resume Score */}
+        <div className="rounded-xl border border-line bg-paper-raised p-8 shadow-sm flex flex-col justify-between space-y-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <FileText className="w-5 h-5 text-forest" />
+              <h2 className="font-display text-display-md text-ink">Resume Score</h2>
             </div>
-            <p className="font-mono text-data-lg font-bold text-ink">{value}</p>
-          </Link>
-        ))}
+            <Link
+              href="/resume"
+              className="font-body text-body-sm font-medium text-forest hover:underline flex items-center gap-1"
+            >
+              <span>View details</span>
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
+
+          {resumeScore !== null ? (
+            <div className="flex flex-col items-center justify-center py-2">
+              <div className="scale-90 transform -my-4">
+                <AtsScoreGauge score={resumeScore} />
+              </div>
+            </div>
+          ) : (
+            <div className="py-6 space-y-4 text-center">
+              <p className="font-body text-body text-ink-muted">
+                Upload your resume to get an ATS score and keyword gap audit.
+              </p>
+              <Link
+                href="/resume"
+                className="inline-flex items-center gap-2 rounded-md bg-forest px-4 py-2 text-body-sm font-medium text-paper-raised hover:bg-forest-hover transition-colors shadow-sm"
+              >
+                <span>Upload resume</span>
+                <ArrowRight className="w-4 h-4" />
+              </Link>
+            </div>
+          )}
+        </div>
+
+        {/* Card 2: Skill Gaps */}
+        <div className="rounded-xl border border-line bg-paper-raised p-8 shadow-sm flex flex-col justify-between space-y-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <Target className="w-5 h-5 text-forest" />
+              <h2 className="font-display text-display-md text-ink">Skill Gaps</h2>
+            </div>
+            <Link
+              href="/skill"
+              className="font-body text-body-sm font-medium text-forest hover:underline flex items-center gap-1"
+            >
+              <span>Skill report</span>
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
+
+          {targetRole ? (
+            <div className="space-y-4 py-4">
+              <div className="space-y-1">
+                <span className="font-mono text-data-lg text-[3rem] font-bold text-ink leading-none">
+                  {missingSkillsCount}
+                </span>
+                <p className="font-body text-body text-ink-muted">
+                  missing skills identified
+                </p>
+              </div>
+
+              <div className="pt-4 border-t border-line">
+                <p className="font-body text-body-sm text-ink-muted">
+                  Target role:{" "}
+                  <span className="font-semibold text-ink">{targetRole}</span>
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="py-6 space-y-4 text-center">
+              <p className="font-body text-body text-ink-muted">
+                Select a target career role to generate your skill gap analysis.
+              </p>
+              <Link
+                href="/skill"
+                className="inline-flex items-center gap-2 rounded-md bg-forest px-4 py-2 text-body-sm font-medium text-paper-raised hover:bg-forest-hover transition-colors shadow-sm"
+              >
+                <span>Select target role</span>
+                <ArrowRight className="w-4 h-4" />
+              </Link>
+            </div>
+          )}
+        </div>
+
+        {/* Card 3: Roadmap Progress */}
+        <div className="rounded-xl border border-line bg-paper-raised p-8 shadow-sm flex flex-col justify-between space-y-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <Compass className="w-5 h-5 text-forest" />
+              <h2 className="font-display text-display-md text-ink">Roadmap Progress</h2>
+            </div>
+            <Link
+              href="/learning"
+              className="font-body text-body-sm font-medium text-forest hover:underline flex items-center gap-1"
+            >
+              <span>Learning path</span>
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
+
+          {totalItems > 0 ? (
+            <div className="flex flex-col items-center justify-center space-y-4 py-2">
+              <div className="relative w-48 h-32 flex items-center justify-center">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={gaugeData}
+                      cx="50%"
+                      cy="80%"
+                      startAngle={180}
+                      endAngle={0}
+                      innerRadius={55}
+                      outerRadius={75}
+                      paddingAngle={0}
+                      dataKey="value"
+                    >
+                      {/* Documented Recharts hex exception: BRASS_HEX (#C89B3C) & LINE_HEX (#DAD8CE) */}
+                      <Cell key="completed" fill={BRASS_HEX} />
+                      <Cell key="remaining" fill={LINE_HEX} />
+                    </Pie>
+                  </PieChart>
+                </ResponsiveContainer>
+
+                <div className="absolute bottom-2 text-center">
+                  <span className="font-mono text-data-lg font-bold text-ink">
+                    {Math.round(completionPercentage)}%
+                  </span>
+                </div>
+              </div>
+
+              <div className="text-center space-y-1">
+                <p className="font-mono text-data font-semibold text-ink">
+                  {completedItems} / {totalItems} items completed
+                </p>
+                <p className="font-body text-body-sm text-ink-muted">
+                  Active roadmap overall completion
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="py-6 space-y-4 text-center">
+              <p className="font-body text-body text-ink-muted">
+                Generate a personalized learning roadmap from your skill gap report.
+              </p>
+              <Link
+                href="/skill"
+                className="inline-flex items-center gap-2 rounded-md bg-forest px-4 py-2 text-body-sm font-medium text-paper-raised hover:bg-forest-hover transition-colors shadow-sm"
+              >
+                <span>Generate roadmap</span>
+                <ArrowRight className="w-4 h-4" />
+              </Link>
+            </div>
+          )}
+        </div>
+
+        {/* Card 4: Career Advisor Teaser */}
+        <div className="rounded-xl border border-forest bg-forest text-paper-raised p-8 shadow-sm flex flex-col justify-between space-y-6 hover:bg-forest-hover transition-colors">
+          <div className="space-y-4">
+            <div className="flex items-center gap-2.5">
+              <MessageSquare className="w-5 h-5 text-brass-soft" />
+              <h2 className="font-display text-display-md text-paper-raised">
+                Career Advisor
+              </h2>
+            </div>
+            <p className="font-body text-body text-paper/90 leading-relaxed">
+              Career Intelligence — interactive career coaching, compensation strategy, and AI mock interviews coming in Phase 3.
+            </p>
+          </div>
+
+          <div>
+            <Link
+              href="/career"
+              className="inline-flex items-center gap-2 rounded-md bg-brass px-4 py-2.5 text-body-sm font-medium text-ink hover:bg-brass/90 transition-colors shadow-sm"
+            >
+              <span>Explore teaser</span>
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
+        </div>
+
       </div>
     </div>
   );

@@ -1,19 +1,13 @@
 /**
- * Dashboard types — summary card data shapes.
- * Filled out incrementally as each module ships (per Implementation_plan.md).
+ * Dashboard summary types — matches GET /api/v1/dashboard/summary backend schema.
  */
 
 export interface DashboardSummary {
-  resumeCount: number;
-  latestAtsScore?: number | null;
-  activeRoadmapCount: number;
-  openSkillGaps: number;
-  nextActions: NextAction[];
-}
-
-export interface NextAction {
-  id: string;
-  label: string;
-  href: string;
-  priority: "high" | "medium" | "low";
+  resume_score: number | null;
+  missing_skills_count: number;
+  target_role: string | null;
+  roadmap_total_items: number;
+  roadmap_completed_items: number;
+  roadmap_completion_percentage: number;
+  active_roadmap_id: string | null;
 }
