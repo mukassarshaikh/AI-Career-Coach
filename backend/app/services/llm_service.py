@@ -10,7 +10,7 @@ All LLM inference calls across the application MUST go through this service.
 import asyncio
 import json
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, AsyncGenerator, Dict, List, Optional
 from uuid import UUID
 
 from groq import AsyncGroq, APIStatusError, RateLimitError
@@ -493,4 +493,53 @@ async def generate_roadmap_llm(
     except json.JSONDecodeError:
         logger.error(f"Failed to parse roadmap LLM JSON response: {response_text}")
         return []
+
+
+# ---------------------------------------------------------------------------
+# Career Intelligence Conversational Streaming
+# ---------------------------------------------------------------------------
+async def stream_chat_response(
+    messages: List[Dict[str, str]],
+    system_prompt: str,
+    user_id: Optional[UUID] = None,
+    db: Optional[AsyncSession] = None,
+) -> AsyncGenerator[str, None]:
+    """
+    Async generator that streams conversational chat completion chunks from Groq API.
+    Once streaming completes, logs the full assembled response to `ai_generation_logs` with module='career'.
+    """
+    client = _get_groq_client()
+    full_messages = [{"role": "system", "content": system_prompt}] + messages
+
+    collected_chunks: List[str] = []
+
+    try:
+        stream = await client.chat.completions.create(
+            messages=full_messages,
+            model=settings.groq_model,
+            stream=True,
+            temperature=0.7,
+        )
+        async for chunk in stream:
+            if chunk.choices and chunk.choices[0].delta.content:
+                text_chunk = chunk.choices[0].delta.content
+                collected_chunks.append(text_chunk)
+                yield text_chunk
+    except Exception as exc:
+        logger.error(f"Error during Groq chat streaming: {exc}")
+        raise exc
+
+    full_response = "".join(collected_chunks)
+    full_prompt = f"System: {system_prompt}\nMessages: {json.dumps(messages)}"
+
+    if db is not None:
+        await log_ai_generation(
+            module="career",
+            prompt=full_prompt,
+            response=full_response,
+            model_used=settings.groq_model,
+            user_id=user_id,
+            db=db,
+        )
+
 
