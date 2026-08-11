@@ -54,8 +54,9 @@ export function RoadmapTimeline({
     groupedItems.forEach((group) => {
       currentY += groupHeaderHeight;
       group.items.forEach(() => {
-        // Wavy organic contour line curving left and right
-        const x = 24 + Math.sin(globalIndex * 0.9) * 10;
+        // Hand-plotted ascending contour line curving organically left and right
+        const baseX = 24;
+        const x = baseX + Math.sin(globalIndex * 0.8) * 16;
         const y = currentY + 50;
         points.push({ x, y });
         currentY += itemHeight;
