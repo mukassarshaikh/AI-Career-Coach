@@ -1,3 +1,4 @@
-// Placeholder barrel — career components added in Phase 3
-// ChatWindow, ChatMessageBubble, MockInterviewPanel
-export {};
+export { ChatWindow } from "./ChatWindow";
+export { ChatMessageBubble } from "./ChatMessageBubble";
+export { MockInterviewPanel } from "./MockInterviewPanel";
+export { SessionTypeSelector } from "./SessionTypeSelector";

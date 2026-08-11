@@ -10,4 +10,7 @@ export interface DashboardSummary {
   roadmap_completed_items: number;
   roadmap_completion_percentage: number;
   active_roadmap_id: string | null;
+  chat_sessions_count?: number;
+  latest_chat_session_id?: string | null;
 }
+

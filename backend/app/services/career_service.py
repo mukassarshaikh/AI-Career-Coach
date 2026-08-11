@@ -213,3 +213,33 @@ async def build_system_prompt(db: AsyncSession, user_id: UUID, context_type: str
         )
 
     return prompt
+
+
+SENSITIVE_TOPIC_KEYWORDS = [
+    # Legal
+    "legal", "lawyer", "lawsuit", "contract", "nda", "severance", "non-compete", "wrongful termination", "attorney",
+    # Visa / Immigration
+    "visa", "h1b", "h-1b", "green card", "work authorization", "immigration", "opt", "cpt", "sponsor", "citizenship",
+    # Compensation
+    "compensation", "salary", "pay", "bonus", "equity", "stock options", "negotiate salary", "pay raise", "base pay",
+]
+
+SENSITIVE_TOPIC_DISCLAIMER = (
+    "[Disclaimer: I am an AI career advisor, not a licensed legal, visa/immigration, or financial professional. "
+    "The following guidance is provided for informational purposes only. Please consult a qualified specialist for formal legal, immigration, or compensation decisions.]\n\n"
+)
+
+
+def get_sensitive_topic_disclaimer(content: str) -> Optional[str]:
+    """
+    Detects if user message contains legal, visa/immigration, or compensation-related topics.
+    Returns disclaimer text to prepend if detected, otherwise None.
+    """
+    if not content:
+        return None
+    lower_content = content.lower()
+    for kw in SENSITIVE_TOPIC_KEYWORDS:
+        if kw in lower_content:
+            return SENSITIVE_TOPIC_DISCLAIMER
+    return None
+

@@ -21,6 +21,8 @@ export default function DashboardPage() {
   const completedItems = summary?.roadmap_completed_items ?? 0;
   const totalItems = summary?.roadmap_total_items ?? 0;
 
+  const chatSessionsCount = summary?.chat_sessions_count ?? 0;
+
   // Recharts color constants (documented hex values for SVG elements unable to resolve CSS variables directly)
   const BRASS_HEX = "#C89B3C"; // --color-brass
   const LINE_HEX = "#DAD8CE"; // --color-line
@@ -220,18 +222,28 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* Card 4: Career Advisor Teaser */}
+        {/* Card 4: Career Advisor (Active) */}
         <div className="rounded-xl border border-forest bg-forest text-paper-raised p-8 shadow-sm flex flex-col justify-between space-y-6 hover:bg-forest-hover transition-colors">
           <div className="space-y-4">
-            <div className="flex items-center gap-2.5">
-              <MessageSquare className="w-5 h-5 text-brass-soft" />
-              <h2 className="font-display text-display-md text-paper-raised">
-                Career Advisor
-              </h2>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <MessageSquare className="w-5 h-5 text-brass-soft" />
+                <h2 className="font-display text-display-md text-paper-raised">
+                  Career Advisor
+                </h2>
+              </div>
+              <span className="text-data text-xs px-2.5 py-1 rounded-md bg-brass-soft/20 text-brass-soft font-mono">
+                Active
+              </span>
             </div>
             <p className="font-body text-body text-paper/90 leading-relaxed">
-              Career Intelligence — interactive career coaching, compensation strategy, and AI mock interviews coming in Phase 3.
+              Conversational AI career coaching, compensation guidance, and mock interviews tailored to your candidate profile.
             </p>
+            {chatSessionsCount > 0 && (
+              <div className="pt-2 border-t border-paper/20 text-body-sm text-paper/80 font-mono">
+                {chatSessionsCount} conversation session{chatSessionsCount > 1 ? "s" : ""} active
+              </div>
+            )}
           </div>
 
           <div>
@@ -239,11 +251,12 @@ export default function DashboardPage() {
               href="/career"
               className="inline-flex items-center gap-2 rounded-md bg-brass px-4 py-2.5 text-body-sm font-medium text-ink hover:bg-brass/90 transition-colors shadow-sm"
             >
-              <span>Explore teaser</span>
+              <span>{chatSessionsCount > 0 ? "Continue conversation" : "Start Career Advisor"}</span>
               <ArrowRight className="w-4 h-4" />
             </Link>
           </div>
         </div>
+
 
       </div>
     </div>

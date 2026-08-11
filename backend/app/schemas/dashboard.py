@@ -18,5 +18,8 @@ class DashboardSummaryResponse(BaseModel):
     roadmap_completed_items: int = Field(0, description="Completed items in active roadmap")
     roadmap_completion_percentage: float = Field(0.0, description="Roadmap completion percentage (0-100)")
     active_roadmap_id: Optional[UUID] = Field(None, description="ID of current active roadmap")
+    chat_sessions_count: int = Field(0, description="Total active career chat sessions")
+    latest_chat_session_id: Optional[UUID] = Field(None, description="ID of current or most recent chat session")
 
     model_config = ConfigDict(from_attributes=True)
+

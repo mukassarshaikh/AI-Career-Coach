@@ -1,22 +1,33 @@
 /**
  * Career / chat types — mirrors backend Pydantic schemas.
- * Filled out in Phase 3.
  */
 
 export type ChatContextType = "general" | "mock_interview" | "career_strategy";
 export type ChatRole = "user" | "assistant";
 
-export interface ChatSession {
-  id: string;
-  userId: string;
-  contextType: ChatContextType;
-  createdAt: string;
+export interface CreateSessionRequest {
+  context_type: ChatContextType;
 }
 
-export interface ChatMessage {
+export interface CreateSessionResponse {
   id: string;
-  sessionId: string;
+  context_type: ChatContextType;
+  created_at: string;
+}
+
+export interface SendMessageRequest {
+  content: string;
+}
+
+export interface ChatMessageResponse {
+  id: string;
+  session_id: string;
   role: ChatRole;
   content: string;
-  createdAt: string;
+  created_at: string;
+}
+
+export interface ChatHistoryResponse {
+  session_id: string;
+  messages: ChatMessageResponse[];
 }

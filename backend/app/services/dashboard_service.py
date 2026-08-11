@@ -8,6 +8,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.career import ChatSession
 from app.models.resume import Resume
 from app.models.skill import SkillGapReport
 from app.schemas.dashboard import DashboardSummaryResponse
@@ -21,7 +22,7 @@ async def get_user_dashboard_summary(
     user_id: UUID,
 ) -> DashboardSummaryResponse:
     """
-    Consolidates candidate status across Resume, Skill, and Learning Intelligence engines.
+    Consolidates candidate status across Resume, Skill, Learning, and Career Intelligence engines.
     """
     # 1. Fetch latest resume ATS score
     resume_stmt = (
@@ -42,7 +43,6 @@ async def get_user_dashboard_summary(
     )
     gap_res = await db.execute(gap_stmt)
     latest_gap_report = gap_res.scalar_one_or_none()
-
 
     missing_count = 0
     target_role = None
@@ -67,6 +67,17 @@ async def get_user_dashboard_summary(
         if total_items > 0:
             percentage = round((completed_items / total_items) * 100, 1)
 
+    # 4. Fetch Career Chat Sessions
+    chat_stmt = (
+        select(ChatSession)
+        .where(ChatSession.user_id == user_id)
+        .order_by(ChatSession.created_at.desc())
+    )
+    chat_res = await db.execute(chat_stmt)
+    chat_sessions = list(chat_res.scalars().all())
+    chat_sessions_count = len(chat_sessions)
+    latest_chat_session_id = chat_sessions[0].id if chat_sessions else None
+
     return DashboardSummaryResponse(
         resume_score=latest_ats_score,
         missing_skills_count=missing_count,
@@ -75,4 +86,7 @@ async def get_user_dashboard_summary(
         roadmap_completed_items=completed_items,
         roadmap_completion_percentage=percentage,
         active_roadmap_id=active_roadmap_id,
+        chat_sessions_count=chat_sessions_count,
+        latest_chat_session_id=latest_chat_session_id,
     )
+

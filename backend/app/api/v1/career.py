@@ -150,8 +150,16 @@ async def send_chat_message_endpoint(
         context_type=session.context_type,
     )
 
+    # Check for sensitive topic disclaimer (legal, visa/immigration, compensation)
+    disclaimer = career_service.get_sensitive_topic_disclaimer(body.content)
+
     async def event_generator() -> AsyncGenerator[str, None]:
         collected_chunks = []
+        if disclaimer:
+            collected_chunks.append(disclaimer)
+            formatted_disc = disclaimer.replace("\n", "\ndata: ")
+            yield f"data: {formatted_disc}\n\n"
+
         try:
             async for text_chunk in llm_service.stream_chat_response(
                 messages=messages,

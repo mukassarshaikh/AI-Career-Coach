@@ -226,3 +226,80 @@ async def test_career_service_session_and_message_crud():
     assert len(history) == 2
     assert history[0].role == "user"
     assert history[1].role == "assistant"
+
+
+# ---------------------------------------------------------------------------
+# 5. Sensitive Topic Disclaimer Tests
+# ---------------------------------------------------------------------------
+def test_sensitive_topic_disclaimer_detection():
+    """Verify sensitive topic detector identifies legal, visa, and compensation queries."""
+    # Standard career question -> no disclaimer
+    disc_norm = career_service.get_sensitive_topic_disclaimer("What skills should I learn first?")
+    assert disc_norm is None
+
+    # Compensation query -> disclaimer returned
+    disc_comp = career_service.get_sensitive_topic_disclaimer("How should I negotiate my salary and stock options?")
+    assert disc_comp is not None
+    assert "[Disclaimer:" in disc_comp
+    assert "compensation" in disc_comp.lower()
+
+    # Visa/immigration query -> disclaimer returned
+    disc_visa = career_service.get_sensitive_topic_disclaimer("Can I change employers while on an H1B visa?")
+    assert disc_visa is not None
+    assert "immigration" in disc_visa.lower()
+
+    # Legal query -> disclaimer returned
+    disc_legal = career_service.get_sensitive_topic_disclaimer("Is this non-compete contract clause enforceable?")
+    assert disc_legal is not None
+    assert "legal" in disc_legal.lower()
+
+
+# ---------------------------------------------------------------------------
+# 6. API Security & Ownership Tests
+# ---------------------------------------------------------------------------
+def test_career_api_routes_unauthenticated_rejection():
+    """Verify career API endpoints return 401 Unauthorized when missing JWT token."""
+    session_id = uuid.uuid4()
+
+    # Create session without token
+    res_session = client.post("/api/v1/career/chat/session", json={"context_type": "general"})
+    assert res_session.status_code == 401
+
+    # Get history without token
+    res_hist = client.get(f"/api/v1/career/chat/{session_id}/history")
+    assert res_hist.status_code == 401
+
+    # Send message without token
+    res_msg = client.post(f"/api/v1/career/chat/{session_id}/message", json={"content": "Hello"})
+    assert res_msg.status_code == 401
+
+
+def test_career_api_routes_session_ownership_and_404():
+    """Verify API returns 404 when querying non-existent or unowned chat session."""
+    token = generate_test_token("owner_test@example.com")
+    headers = {"Authorization": f"Bearer {token}"}
+    session_id = uuid.uuid4()
+    dummy_user = User(id=uuid.uuid4(), email="owner_test@example.com")
+
+    from app.api.v1.deps import get_current_user, get_db
+    app.dependency_overrides[get_current_user] = lambda: dummy_user
+
+    mock_db = AsyncMock()
+    mock_db.execute = AsyncMock(return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=None), scalars=MagicMock(return_value=MagicMock(first=MagicMock(return_value=None)))))
+    async def mock_get_db():
+        yield mock_db
+    app.dependency_overrides[get_db] = mock_get_db
+
+    try:
+        # History on non-existent or cross-user session -> 404
+        res_hist = client.get(f"/api/v1/career/chat/{session_id}/history", headers=headers)
+        assert res_hist.status_code == 404
+        assert res_hist.json()["detail"] == "Chat session not found."
+
+        # Send message on non-existent or cross-user session -> 404
+        res_msg = client.post(f"/api/v1/career/chat/{session_id}/message", headers=headers, json={"content": "Test"})
+        assert res_msg.status_code == 404
+        assert res_msg.json()["detail"] == "Chat session not found."
+    finally:
+        app.dependency_overrides.clear()
+
