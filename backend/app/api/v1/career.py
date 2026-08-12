@@ -24,6 +24,8 @@ from app.schemas.career import (
     ChatSessionPreviewResponse,
     CreateSessionRequest,
     CreateSessionResponse,
+    DeleteSessionResponse,
+    RenameSessionRequest,
     SendMessageRequest,
 )
 from app.services import career_service, llm_service
@@ -75,6 +77,57 @@ async def create_chat_session_endpoint(
         context_type=body.context_type.value,
     )
     return CreateSessionResponse.model_validate(session)
+
+
+@router.patch(
+    "/chat/sessions/{session_id}",
+    response_model=CreateSessionResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Rename a chat session",
+    description="Renames an owned chat session with a new non-empty name string (1-200 characters).",
+)
+async def rename_chat_session_endpoint(
+    session_id: UUID,
+    body: RenameSessionRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> CreateSessionResponse:
+    """
+    Renames a chat session owned by the authenticated user.
+    """
+    session = await career_service.rename_session(
+        db=db,
+        session_id=session_id,
+        user_id=current_user.id,
+        new_name=body.name,
+    )
+    return CreateSessionResponse.model_validate(session)
+
+
+@router.delete(
+    "/chat/sessions/{session_id}",
+    response_model=DeleteSessionResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Delete a chat session",
+    description="Deletes an owned chat session and all associated chat messages.",
+)
+async def delete_chat_session_endpoint(
+    session_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> DeleteSessionResponse:
+    """
+    Deletes a chat session and associated messages for the authenticated user.
+    """
+    res = await career_service.delete_session(
+        db=db,
+        session_id=session_id,
+        user_id=current_user.id,
+    )
+    return DeleteSessionResponse(
+        deleted=res["deleted"],
+        session_id=session_id,
+    )
 
 
 

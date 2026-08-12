@@ -1,8 +1,20 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import { MessageSquare, UserCheck, Compass, X, Plus } from "lucide-react";
-import { useSessionsList } from "@/lib/hooks/useCareer";
+import { useEffect, useRef, useState } from "react";
+import {
+  Compass,
+  Edit2,
+  MessageSquare,
+  Plus,
+  Trash2,
+  UserCheck,
+  X,
+} from "lucide-react";
+import {
+  useDeleteSession,
+  useRenameSession,
+  useSessionsList,
+} from "@/lib/hooks/useCareer";
 import type { ChatContextType, ChatSessionPreview } from "@/types/career";
 
 interface HistoryDrawerProps {
@@ -19,18 +31,36 @@ export function HistoryDrawer({
   onNewSession,
 }: HistoryDrawerProps) {
   const { data: sessions, isLoading } = useSessionsList();
+  const renameSessionMutation = useRenameSession();
+  const deleteSessionMutation = useDeleteSession();
+
   const drawerRef = useRef<HTMLDivElement>(null);
 
-  // Close on Escape key
+  // State for inline rename
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState<string>("");
+
+  // State for delete confirmation modal
+  const [sessionToDelete, setSessionToDelete] = useState<ChatSessionPreview | null>(
+    null
+  );
+
+  // Close on Escape key (if no dialog or inline edit is overriding)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape" && isOpen) {
-        onClose();
+        if (sessionToDelete) {
+          setSessionToDelete(null);
+        } else if (editingSessionId) {
+          setEditingSessionId(null);
+        } else {
+          onClose();
+        }
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, onClose]);
+  }, [isOpen, sessionToDelete, editingSessionId, onClose]);
 
   // Format relative date string
   const formatRelativeDate = (dateStr: string) => {
@@ -51,6 +81,30 @@ export function HistoryDrawer({
       return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
     } catch {
       return "Past session";
+    }
+  };
+
+  const handleStartRename = (
+    e: React.MouseEvent,
+    session: ChatSessionPreview
+  ) => {
+    e.stopPropagation();
+    setEditingSessionId(session.id);
+    setEditingName(session.name || session.preview || "Untitled session");
+  };
+
+  const handleSaveRename = (sessionId: string) => {
+    const trimmed = editingName.trim();
+    if (trimmed) {
+      renameSessionMutation.mutate({ sessionId, name: trimmed });
+    }
+    setEditingSessionId(null);
+  };
+
+  const handleConfirmDelete = () => {
+    if (sessionToDelete) {
+      deleteSessionMutation.mutate(sessionToDelete.id);
+      setSessionToDelete(null);
     }
   };
 
@@ -81,7 +135,7 @@ export function HistoryDrawer({
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
-      {/* Dark backdrop overlay */}
+      {/* Backdrop overlay */}
       <div
         className="fixed inset-0 bg-ink/30 transition-opacity"
         onClick={onClose}
@@ -94,7 +148,7 @@ export function HistoryDrawer({
         role="dialog"
         aria-label="Chat History"
         aria-modal="true"
-        className="relative w-80 max-w-full h-full bg-paper-raised border-l border-line shadow-md flex flex-col p-6 z-10 font-sans"
+        className="relative w-80 max-w-full h-full bg-paper-raised border-l border-line shadow-sm flex flex-col p-6 z-10 font-sans"
       >
         {/* Drawer Header */}
         <div className="flex items-center justify-between pb-4 border-b border-line mb-4">
@@ -110,7 +164,7 @@ export function HistoryDrawer({
           </button>
         </div>
 
-        {/* New Session Reset Action */}
+        {/* New Session Action */}
         <button
           type="button"
           id="btn-drawer-new-session"
@@ -124,7 +178,7 @@ export function HistoryDrawer({
           <span>New session</span>
         </button>
 
-        {/* Session List Grouped by Context Type */}
+        {/* Sessions Grouped by Context Type */}
         <div className="flex-1 overflow-y-auto space-y-6 pr-1">
           {isLoading ? (
             <p className="text-body-sm text-ink-muted text-center py-8">
@@ -149,26 +203,84 @@ export function HistoryDrawer({
                   </div>
 
                   <div className="space-y-1.5">
-                    {items.map((session) => (
-                      <button
-                        key={session.id}
-                        type="button"
-                        onClick={() => {
-                          onSelectSession(session.id, session.context_type);
-                          onClose();
-                        }}
-                        className="w-full text-left p-3 rounded-md border border-line bg-paper/50 hover:bg-paper hover:border-forest/50 transition-colors group"
-                      >
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="font-mono text-xs text-ink-muted">
-                            {formatRelativeDate(session.created_at)}
-                          </span>
+                    {items.map((session) => {
+                      const isEditing = editingSessionId === session.id;
+                      const sessionName =
+                        session.name || session.preview || "Untitled session";
+
+                      return (
+                        <div
+                          key={session.id}
+                          className="group relative flex items-center justify-between p-3 rounded-md border border-line bg-paper/50 hover:bg-paper hover:border-forest/50 transition-colors"
+                        >
+                          <div
+                            onClick={() => {
+                              if (!isEditing) {
+                                onSelectSession(
+                                  session.id,
+                                  session.context_type
+                                );
+                                onClose();
+                              }
+                            }}
+                            className="flex-1 min-w-0 cursor-pointer pr-2"
+                          >
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="font-mono text-xs text-ink-muted">
+                                {formatRelativeDate(session.created_at)}
+                              </span>
+                            </div>
+
+                            {isEditing ? (
+                              <input
+                                type="text"
+                                autoFocus
+                                value={editingName}
+                                onChange={(e) => setEditingName(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    handleSaveRename(session.id);
+                                  } else if (e.key === "Escape") {
+                                    setEditingSessionId(null);
+                                  }
+                                }}
+                                onBlur={() => handleSaveRename(session.id)}
+                                className="w-full text-body-sm px-2 py-1 bg-paper border border-forest rounded focus:outline-none font-medium text-ink"
+                              />
+                            ) : (
+                              <p className="text-body-sm text-ink font-medium truncate group-hover:text-forest">
+                                {sessionName}
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Action Buttons (Rename & Delete) */}
+                          {!isEditing && (
+                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button
+                                type="button"
+                                title="Rename session"
+                                onClick={(e) => handleStartRename(e, session)}
+                                className="p-1 text-ink-muted hover:text-forest rounded hover:bg-paper-raised"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                title="Delete session"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSessionToDelete(session);
+                                }}
+                                className="p-1 text-ink-muted hover:text-clay rounded hover:bg-paper-raised"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          )}
                         </div>
-                        <p className="text-body-sm text-ink font-medium truncate group-hover:text-forest">
-                          {session.preview}
-                        </p>
-                      </button>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               );
@@ -176,6 +288,56 @@ export function HistoryDrawer({
           )}
         </div>
       </div>
+
+      {/* Confirmation Dialog Modal for Session Deletion */}
+      {sessionToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="fixed inset-0 bg-ink/40"
+            onClick={() => setSessionToDelete(null)}
+          />
+          <div
+            role="alertdialog"
+            aria-labelledby="delete-dialog-title"
+            aria-describedby="delete-dialog-desc"
+            className="relative bg-paper-raised border border-line rounded-lg p-6 max-w-sm w-full shadow-lg z-10 space-y-4"
+          >
+            <div>
+              <h3
+                id="delete-dialog-title"
+                className="text-body font-semibold text-ink"
+              >
+                Delete this session?
+              </h3>
+              <p
+                id="delete-dialog-desc"
+                className="text-body-sm text-ink-muted mt-1"
+              >
+                This action cannot be undone. All messages in this session will be permanently deleted.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2 border-t border-line">
+              <button
+                type="button"
+                id="btn-cancel-delete"
+                onClick={() => setSessionToDelete(null)}
+                className="px-4 py-2 text-body-sm font-medium text-ink bg-paper border border-line rounded-md hover:bg-paper-raised transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                id="btn-confirm-delete"
+                onClick={handleConfirmDelete}
+                className="px-4 py-2 text-body-sm font-medium text-white bg-clay rounded-md hover:bg-clay/90 transition-colors"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -11,8 +11,18 @@ export interface CreateSessionRequest {
 
 export interface CreateSessionResponse {
   id: string;
+  name?: string | null;
   context_type: ChatContextType;
   created_at: string;
+}
+
+export interface RenameSessionRequest {
+  name: string;
+}
+
+export interface DeleteSessionResponse {
+  deleted: boolean;
+  session_id: string;
 }
 
 export interface SendMessageRequest {
@@ -34,8 +44,8 @@ export interface ChatHistoryResponse {
 
 export interface ChatSessionPreview {
   id: string;
+  name?: string | null;
   context_type: ChatContextType;
   created_at: string;
   preview: string;
 }
-

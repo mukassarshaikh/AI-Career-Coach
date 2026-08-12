@@ -5,6 +5,7 @@ import type {
   ChatHistoryResponse,
   ChatSessionPreview,
   CreateSessionResponse,
+  DeleteSessionResponse,
 } from "@/types/career";
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
@@ -15,7 +16,6 @@ const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:800
 export async function getSessionsList(): Promise<ChatSessionPreview[]> {
   return fetchWithAuth<ChatSessionPreview[]>("/api/v1/career/chat/sessions");
 }
-
 
 /**
  * Creates a new career chat session for the specified context type.
@@ -28,6 +28,37 @@ export async function createSession(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ context_type: contextType }),
   });
+}
+
+/**
+ * Renames an existing chat session.
+ */
+export async function renameSession(
+  sessionId: string,
+  name: string
+): Promise<CreateSessionResponse> {
+  return fetchWithAuth<CreateSessionResponse>(
+    `/api/v1/career/chat/sessions/${sessionId}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    }
+  );
+}
+
+/**
+ * Deletes an existing chat session.
+ */
+export async function deleteSession(
+  sessionId: string
+): Promise<DeleteSessionResponse> {
+  return fetchWithAuth<DeleteSessionResponse>(
+    `/api/v1/career/chat/sessions/${sessionId}`,
+    {
+      method: "DELETE",
+    }
+  );
 }
 
 /**

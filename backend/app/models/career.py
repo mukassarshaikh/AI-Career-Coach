@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Text, DateTime, ForeignKey, func, Index
+from typing import Optional
+from sqlalchemy import Text, DateTime, ForeignKey, String, func, Index
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -16,6 +17,7 @@ class ChatSession(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
+    name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     # enum-like: general / mock_interview / career_strategy
     context_type: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(

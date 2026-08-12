@@ -6,7 +6,8 @@ import logging
 from typing import List, Optional
 from uuid import UUID
 
-from sqlalchemy import select
+from fastapi import HTTPException
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.career import ChatMessage, ChatSession
@@ -56,7 +57,20 @@ async def get_session_history(db: AsyncSession, session_id: UUID, user_id: UUID)
 
 
 async def save_message(db: AsyncSession, session_id: UUID, role: str, content: str) -> ChatMessage:
-    """Saves a ChatMessage row for the specified session."""
+    """
+    Saves a ChatMessage row for the specified session.
+    If this is the first user message saved in a session, auto-derives and updates session.name.
+    """
+    # Check count of user messages prior to saving if this is a user message
+    user_msg_count_before = 0
+    if role == "user":
+        cnt_stmt = select(func.count(ChatMessage.id)).where(
+            ChatMessage.session_id == session_id,
+            ChatMessage.role == "user",
+        )
+        cnt_res = await db.execute(cnt_stmt)
+        user_msg_count_before = cnt_res.scalar() or 0
+
     msg = ChatMessage(
         session_id=session_id,
         role=role,
@@ -65,6 +79,40 @@ async def save_message(db: AsyncSession, session_id: UUID, role: str, content: s
     db.add(msg)
     await db.commit()
     await db.refresh(msg)
+
+    # Auto-name strategy: check if first user message in session
+    if role == "user" and user_msg_count_before == 0:
+        session_stmt = select(ChatSession).where(ChatSession.id == session_id)
+        session_res = await db.execute(session_stmt)
+        session = session_res.scalar_one_or_none()
+        if session:
+            # Context prefix
+            if session.context_type == "general":
+                prefix = "General: "
+            elif session.context_type == "mock_interview":
+                prefix = "Mock Interview: "
+            elif session.context_type == "career_strategy":
+                prefix = "Strategy: "
+            else:
+                prefix = f"{session.context_type.capitalize()}: "
+
+            # Trim content at 60 chars cleanly at word boundary if possible
+            raw_text = content.strip()
+            if len(raw_text) <= 60:
+                body_snippet = raw_text
+            else:
+                truncated = raw_text[:60]
+                last_space = truncated.rfind(" ")
+                if last_space > 20:
+                    body_snippet = truncated[:last_space] + "..."
+                else:
+                    body_snippet = truncated + "..."
+
+            derived_name = (prefix + body_snippet)[:200]
+            session.name = derived_name
+            db.add(session)
+            await db.commit()
+
     return msg
 
 
@@ -275,11 +323,65 @@ async def get_user_sessions(db: AsyncSession, user_id: UUID) -> List[dict]:
 
         session_previews.append({
             "id": session.id,
+            "name": session.name,
             "context_type": session.context_type,
             "created_at": session.created_at,
             "preview": preview,
         })
 
     return session_previews
+
+
+async def rename_session(
+    db: AsyncSession, session_id: UUID, user_id: UUID, new_name: str
+) -> ChatSession:
+    """
+    Validates user ownership and non-empty new_name (1-200 chars),
+    updates chat_sessions.name, and returns the updated session.
+    """
+    session = await get_session(db, session_id=session_id, user_id=user_id)
+    if not session:
+        raise HTTPException(
+            status_code=404,
+            detail="Chat session not found.",
+        )
+
+    stripped_name = new_name.strip() if new_name else ""
+    if not stripped_name or len(stripped_name) > 200:
+        raise HTTPException(
+            status_code=400,
+            detail="Session name must be between 1 and 200 characters.",
+        )
+
+    session.name = stripped_name
+    db.add(session)
+    await db.commit()
+    await db.refresh(session)
+    return session
+
+
+async def delete_session(
+    db: AsyncSession, session_id: UUID, user_id: UUID
+) -> dict:
+    """
+    Validates user ownership, deletes all chat_messages for the session,
+    deletes the chat_session row, and returns confirmation dictionary.
+    """
+    session = await get_session(db, session_id=session_id, user_id=user_id)
+    if not session:
+        raise HTTPException(
+            status_code=404,
+            detail="Chat session not found.",
+        )
+
+    # Delete messages for session first (cascade is also enabled in DB schema)
+    stmt_msg = delete(ChatMessage).where(ChatMessage.session_id == session_id)
+    await db.execute(stmt_msg)
+
+    # Delete session
+    await db.delete(session)
+    await db.commit()
+
+    return {"deleted": True, "session_id": str(session_id)}
 
 

@@ -345,7 +345,144 @@ def test_get_user_sessions_endpoint():
         assert data[0]["id"] == str(session_id)
         assert data[0]["context_type"] == "general"
         assert "What skills should I focus on first?" in data[0]["preview"]
+        assert "name" in data[0]
     finally:
         app.dependency_overrides.clear()
+
+
+# ---------------------------------------------------------------------------
+# 7. Session Naming, Renaming & Deletion Tests
+# ---------------------------------------------------------------------------
+@pytest.mark.asyncio
+async def test_auto_naming_strategy_on_first_message():
+    """Verify save_message auto-derives and updates session.name on first user message."""
+    user_id = uuid.uuid4()
+    session_id = uuid.uuid4()
+
+    mock_session = ChatSession(
+        id=session_id, user_id=user_id, context_type="general", name=None
+    )
+
+    mock_db = AsyncMock(spec=AsyncSession)
+
+    def mock_exec(stmt):
+        stmt_str = str(stmt)
+        res = MagicMock()
+        if "count" in stmt_str.lower():
+            # First user message -> count prior is 0
+            res.scalar.return_value = 0
+        elif "FROM chat_sessions" in stmt_str:
+            res.scalar_one_or_none.return_value = mock_session
+        return res
+
+    mock_db.execute = AsyncMock(side_effect=mock_exec)
+
+    msg_content = "What skills should I focus on first given my current gaps in frontend?"
+    saved_msg = await career_service.save_message(
+        db=mock_db, session_id=session_id, role="user", content=msg_content
+    )
+
+    assert saved_msg is not None
+    assert mock_session.name is not None
+    assert mock_session.name.startswith("General: What skills should I focus on first given my current")
+
+
+def test_rename_session_endpoint():
+    """Verify PATCH /api/v1/career/chat/sessions/{session_id} renames session."""
+    token = generate_test_token("rename_test@example.com")
+    headers = {"Authorization": f"Bearer {token}"}
+    user_id = uuid.uuid4()
+    session_id = uuid.uuid4()
+
+    dummy_user = User(id=user_id, email="rename_test@example.com")
+    mock_session = ChatSession(
+        id=session_id,
+        user_id=user_id,
+        context_type="general",
+        name="Old Name",
+        created_at=datetime.utcnow(),
+    )
+
+    from app.api.v1.deps import get_current_user, get_db
+    app.dependency_overrides[get_current_user] = lambda: dummy_user
+
+    mock_db = AsyncMock()
+
+    def mock_exec(stmt):
+        res = MagicMock()
+        res.scalar_one_or_none.return_value = mock_session
+        return res
+
+    mock_db.execute = AsyncMock(side_effect=mock_exec)
+
+    async def mock_get_db():
+        yield mock_db
+
+    app.dependency_overrides[get_db] = mock_get_db
+
+    try:
+        # Successful rename
+        res = client.patch(
+            f"/api/v1/career/chat/sessions/{session_id}",
+            headers=headers,
+            json={"name": "My Custom Career Goal"},
+        )
+        assert res.status_code == 200
+        data = res.json()
+        assert data["id"] == str(session_id)
+        assert data["name"] == "My Custom Career Goal"
+
+        # Invalid empty name -> 400
+        res_err = client.patch(
+            f"/api/v1/career/chat/sessions/{session_id}",
+            headers=headers,
+            json={"name": ""},
+        )
+        assert res_err.status_code == 422  # Pydantic min_length=1
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_delete_session_endpoint():
+    """Verify DELETE /api/v1/career/chat/sessions/{session_id} deletes session and messages."""
+    token = generate_test_token("delete_test@example.com")
+    headers = {"Authorization": f"Bearer {token}"}
+    user_id = uuid.uuid4()
+    session_id = uuid.uuid4()
+
+    dummy_user = User(id=user_id, email="delete_test@example.com")
+    mock_session = ChatSession(
+        id=session_id, user_id=user_id, context_type="mock_interview"
+    )
+
+    from app.api.v1.deps import get_current_user, get_db
+    app.dependency_overrides[get_current_user] = lambda: dummy_user
+
+    mock_db = AsyncMock()
+
+    def mock_exec(stmt):
+        res = MagicMock()
+        res.scalar_one_or_none.return_value = mock_session
+        return res
+
+    mock_db.execute = AsyncMock(side_effect=mock_exec)
+
+    async def mock_get_db():
+        yield mock_db
+
+    app.dependency_overrides[get_db] = mock_get_db
+
+    try:
+        res = client.delete(
+            f"/api/v1/career/chat/sessions/{session_id}",
+            headers=headers,
+        )
+        assert res.status_code == 200
+        data = res.json()
+        assert data["deleted"] is True
+        assert data["session_id"] == str(session_id)
+    finally:
+        app.dependency_overrides.clear()
+
 
 
