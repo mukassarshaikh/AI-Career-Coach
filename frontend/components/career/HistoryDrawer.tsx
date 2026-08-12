@@ -272,7 +272,7 @@ export function HistoryDrawer({
                                   e.stopPropagation();
                                   setSessionToDelete(session);
                                 }}
-                                className="p-1 text-ink-muted hover:text-clay rounded hover:bg-paper-raised"
+                                className="p-1 text-ink-muted hover:text-clay-alert rounded hover:bg-paper-raised"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
@@ -330,7 +330,7 @@ export function HistoryDrawer({
                 type="button"
                 id="btn-confirm-delete"
                 onClick={handleConfirmDelete}
-                className="px-4 py-2 text-body-sm font-medium text-white bg-clay rounded-md hover:bg-clay/90 transition-colors"
+                className="px-4 py-2 text-body-sm font-medium text-white bg-clay-alert rounded-md hover:bg-clay-alert/90 transition-colors"
               >
                 Delete
               </button>
