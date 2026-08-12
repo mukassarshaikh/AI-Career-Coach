@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Compass,
   Edit2,
@@ -20,8 +21,8 @@ import type { ChatContextType, ChatSessionPreview } from "@/types/career";
 interface HistoryDrawerProps {
   isOpen: boolean;
   onClose: () => void;
-  onSelectSession: (sessionId: string, contextType: ChatContextType) => void;
-  onNewSession: () => void;
+  onSelectSession?: (sessionId: string, contextType: ChatContextType) => void;
+  onNewSession?: () => void;
 }
 
 export function HistoryDrawer({
@@ -30,6 +31,7 @@ export function HistoryDrawer({
   onSelectSession,
   onNewSession,
 }: HistoryDrawerProps) {
+  const router = useRouter();
   const { data: sessions, isLoading } = useSessionsList();
   const renameSessionMutation = useRenameSession();
   const deleteSessionMutation = useDeleteSession();
@@ -169,7 +171,8 @@ export function HistoryDrawer({
           type="button"
           id="btn-drawer-new-session"
           onClick={() => {
-            onNewSession();
+            if (onNewSession) onNewSession();
+            router.push("/career");
             onClose();
           }}
           className="w-full flex items-center justify-center gap-2 bg-forest text-white py-2.5 px-4 rounded-md font-medium text-body-sm hover:bg-forest-hover transition-colors mb-6 shadow-sm"
@@ -216,10 +219,13 @@ export function HistoryDrawer({
                           <div
                             onClick={() => {
                               if (!isEditing) {
-                                onSelectSession(
-                                  session.id,
-                                  session.context_type
-                                );
+                                if (onSelectSession) {
+                                  onSelectSession(
+                                    session.id,
+                                    session.context_type
+                                  );
+                                }
+                                router.push(`/career/${session.id}`);
                                 onClose();
                               }
                             }}
