@@ -303,3 +303,49 @@ def test_career_api_routes_session_ownership_and_404():
     finally:
         app.dependency_overrides.clear()
 
+
+def test_get_user_sessions_endpoint():
+    """Verify GET /api/v1/career/chat/sessions returns session list with previews."""
+    token = generate_test_token("sessions_list@example.com")
+    headers = {"Authorization": f"Bearer {token}"}
+    user_id = uuid.uuid4()
+    session_id = uuid.uuid4()
+
+    dummy_user = User(id=user_id, email="sessions_list@example.com")
+    mock_session = ChatSession(id=session_id, user_id=user_id, context_type="general", created_at=datetime.utcnow())
+    mock_msg = ChatMessage(id=uuid.uuid4(), session_id=session_id, role="user", content="What skills should I focus on first?")
+
+    from app.api.v1.deps import get_current_user, get_db
+    app.dependency_overrides[get_current_user] = lambda: dummy_user
+
+    mock_db = AsyncMock()
+
+    def mock_exec(stmt):
+        stmt_str = str(stmt)
+        res = MagicMock()
+        if "FROM chat_sessions" in stmt_str:
+            res.scalars().all.return_value = [mock_session]
+        elif "FROM chat_messages" in stmt_str:
+            res.scalar_one_or_none.return_value = mock_msg
+        return res
+
+    mock_db.execute = AsyncMock(side_effect=mock_exec)
+
+    async def mock_get_db():
+        yield mock_db
+
+    app.dependency_overrides[get_db] = mock_get_db
+
+    try:
+        res = client.get("/api/v1/career/chat/sessions", headers=headers)
+        assert res.status_code == 200
+        data = res.json()
+        assert isinstance(data, list)
+        assert len(data) == 1
+        assert data[0]["id"] == str(session_id)
+        assert data[0]["context_type"] == "general"
+        assert "What skills should I focus on first?" in data[0]["preview"]
+    finally:
+        app.dependency_overrides.clear()
+
+

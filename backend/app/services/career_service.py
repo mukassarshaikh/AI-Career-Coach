@@ -243,3 +243,43 @@ def get_sensitive_topic_disclaimer(content: str) -> Optional[str]:
             return SENSITIVE_TOPIC_DISCLAIMER
     return None
 
+
+async def get_user_sessions(db: AsyncSession, user_id: UUID) -> List[dict]:
+    """
+    Fetches all ChatSession rows for a user ordered by created_at desc.
+    Includes a preview snippet of the first user message in each session (or 'New session').
+    """
+    stmt = (
+        select(ChatSession)
+        .where(ChatSession.user_id == user_id)
+        .order_by(ChatSession.created_at.desc())
+    )
+    result = await db.execute(stmt)
+    sessions = list(result.scalars().all())
+
+    session_previews = []
+    for session in sessions:
+        msg_stmt = (
+            select(ChatMessage)
+            .where(ChatMessage.session_id == session.id, ChatMessage.role == "user")
+            .order_by(ChatMessage.created_at.asc())
+            .limit(1)
+        )
+        msg_res = await db.execute(msg_stmt)
+        first_user_msg = msg_res.scalar_one_or_none()
+
+        preview = "New session"
+        if first_user_msg and first_user_msg.content:
+            text = first_user_msg.content.strip()
+            preview = text[:80] + ("..." if len(text) > 80 else "")
+
+        session_previews.append({
+            "id": session.id,
+            "context_type": session.context_type,
+            "created_at": session.created_at,
+            "preview": preview,
+        })
+
+    return session_previews
+
+

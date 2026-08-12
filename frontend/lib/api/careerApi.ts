@@ -3,10 +3,19 @@ import { fetchWithAuth } from "./client";
 import type {
   ChatContextType,
   ChatHistoryResponse,
+  ChatSessionPreview,
   CreateSessionResponse,
 } from "@/types/career";
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
+
+/**
+ * Fetches all chat sessions for the authenticated user with preview snippet.
+ */
+export async function getSessionsList(): Promise<ChatSessionPreview[]> {
+  return fetchWithAuth<ChatSessionPreview[]>("/api/v1/career/chat/sessions");
+}
+
 
 /**
  * Creates a new career chat session for the specified context type.

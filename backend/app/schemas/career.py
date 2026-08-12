@@ -62,3 +62,15 @@ class ChatHistoryResponse(BaseModel):
     )
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ChatSessionPreviewResponse(BaseModel):
+    """Response model for listing user chat sessions with message preview."""
+
+    id: UUID
+    context_type: str
+    created_at: datetime
+    preview: str = Field("New session", description="Preview snippet of the first message")
+
+    model_config = ConfigDict(from_attributes=True)
+

@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { RefreshCw } from "lucide-react";
-import { ChatWindow, MockInterviewPanel } from "@/components/career";
+import { History, RefreshCw } from "lucide-react";
+import { ChatWindow, HistoryDrawer, MockInterviewPanel } from "@/components/career";
 import { SessionTypeSelector } from "@/components/career/SessionTypeSelector";
 import { useCreateSession } from "@/lib/hooks/useCareer";
 import type { ChatContextType } from "@/types/career";
@@ -10,6 +10,7 @@ import type { ChatContextType } from "@/types/career";
 export default function CareerPage() {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [activeContextType, setActiveContextType] = useState<ChatContextType>("general");
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   const createSessionMutation = useCreateSession();
 
@@ -26,6 +27,14 @@ export default function CareerPage() {
     setActiveSessionId(null);
   };
 
+  const handleSelectSessionFromDrawer = (
+    sessionId: string,
+    contextType: ChatContextType
+  ) => {
+    setActiveSessionId(sessionId);
+    setActiveContextType(contextType);
+  };
+
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       {/* Header section */}
@@ -39,17 +48,29 @@ export default function CareerPage() {
           </p>
         </div>
 
-        {activeSessionId && (
+        <div className="flex items-center gap-3">
           <button
             type="button"
-            id="btn-new-session"
-            onClick={handleNewSession}
+            id="btn-history-drawer"
+            onClick={() => setIsDrawerOpen(true)}
             className="flex items-center gap-2 border border-line bg-paper-raised text-ink px-4 py-2 rounded-md hover:bg-paper text-body-sm font-medium transition-colors"
           >
-            <RefreshCw className="w-4 h-4 text-ink-muted" />
-            <span>New session</span>
+            <History className="w-4 h-4 text-ink-muted" />
+            <span>History</span>
           </button>
-        )}
+
+          {activeSessionId && (
+            <button
+              type="button"
+              id="btn-new-session"
+              onClick={handleNewSession}
+              className="flex items-center gap-2 border border-line bg-paper-raised text-ink px-4 py-2 rounded-md hover:bg-paper text-body-sm font-medium transition-colors"
+            >
+              <RefreshCw className="w-4 h-4 text-ink-muted" />
+              <span>New session</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Main Content Area */}
@@ -67,6 +88,14 @@ export default function CareerPage() {
         />
       )}
 
+      {/* History Slide-In Drawer */}
+      <HistoryDrawer
+        isOpen={isDrawerOpen}
+        onClose={() => setIsDrawerOpen(false)}
+        onSelectSession={handleSelectSessionFromDrawer}
+        onNewSession={handleNewSession}
+      />
+
       {/* Legal & professional disclaimer */}
       <div className="pt-2 text-center">
         <p className="text-body-sm text-ink-muted max-w-2xl mx-auto leading-normal">
@@ -76,3 +105,4 @@ export default function CareerPage() {
     </div>
   );
 }
+

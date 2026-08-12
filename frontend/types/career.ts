@@ -31,3 +31,11 @@ export interface ChatHistoryResponse {
   session_id: string;
   messages: ChatMessageResponse[];
 }
+
+export interface ChatSessionPreview {
+  id: string;
+  context_type: ChatContextType;
+  created_at: string;
+  preview: string;
+}
+

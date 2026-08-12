@@ -8,7 +8,7 @@ Endpoints:
 """
 
 import logging
-from typing import AsyncGenerator
+from typing import AsyncGenerator, List
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -21,6 +21,7 @@ from app.models.user import User
 from app.schemas.career import (
     ChatHistoryResponse,
     ChatMessageResponse,
+    ChatSessionPreviewResponse,
     CreateSessionRequest,
     CreateSessionResponse,
     SendMessageRequest,
@@ -30,6 +31,27 @@ from app.services import career_service, llm_service
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/career", tags=["career"])
+
+
+@router.get(
+    "/chat/sessions",
+    response_model=List[ChatSessionPreviewResponse],
+    status_code=status.HTTP_200_OK,
+    summary="Get user chat sessions list",
+    description="Returns all chat sessions for the authenticated user ordered by created_at desc with a message preview snippet.",
+)
+async def get_chat_sessions_endpoint(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> List[ChatSessionPreviewResponse]:
+    """
+    Fetches all chat sessions for current authenticated user with preview text.
+    """
+    sessions = await career_service.get_user_sessions(
+        db=db,
+        user_id=current_user.id,
+    )
+    return [ChatSessionPreviewResponse.model_validate(s) for s in sessions]
 
 
 @router.post(
@@ -53,6 +75,7 @@ async def create_chat_session_endpoint(
         context_type=body.context_type.value,
     )
     return CreateSessionResponse.model_validate(session)
+
 
 
 @router.get(

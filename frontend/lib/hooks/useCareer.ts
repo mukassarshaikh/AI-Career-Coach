@@ -1,8 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createSession, getSessionHistory } from "@/lib/api/careerApi";
+import { createSession, getSessionHistory, getSessionsList } from "@/lib/api/careerApi";
 import type {
   ChatContextType,
   ChatHistoryResponse,
+  ChatSessionPreview,
   CreateSessionResponse,
 } from "@/types/career";
 
@@ -16,7 +17,19 @@ export function useCreateSession() {
     mutationFn: (contextType: ChatContextType) => createSession(contextType),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["sessionHistory", data.id] });
+      queryClient.invalidateQueries({ queryKey: ["userSessions"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboardSummary"] });
     },
+  });
+}
+
+/**
+ * Query hook to fetch all past user chat sessions.
+ */
+export function useSessionsList() {
+  return useQuery<ChatSessionPreview[]>({
+    queryKey: ["userSessions"],
+    queryFn: getSessionsList,
   });
 }
 
@@ -31,3 +44,4 @@ export function useSessionHistory(sessionId: string | undefined) {
     enabled: !!sessionId,
   });
 }
+
