@@ -128,7 +128,7 @@ async def upload_resume(
 
     return ResumeUploadResponse(
         resume_id=resume.id,
-        file_url=resume.file_url,
+        file_url=resume_service.get_effective_resume_file_url(resume),
         created_at=resume.created_at,
         job_id=job_id,
         message="Resume uploaded successfully; background parsing enqueued.",
@@ -150,7 +150,12 @@ async def list_resumes(
     Returns a list of all resume records owned by the authenticated user.
     """
     resumes = await resume_service.list_user_resumes(db=db, user_id=current_user.id)
-    return [ResumeResponse.model_validate(r) for r in resumes]
+    response_list = []
+    for r in resumes:
+        resp = ResumeResponse.model_validate(r)
+        resp.file_url = resume_service.get_effective_resume_file_url(r)
+        response_list.append(resp)
+    return response_list
 
 
 @router.post(
@@ -363,4 +368,6 @@ async def get_resume(
             detail="Resume not found.",
         )
 
-    return ResumeResponse.model_validate(resume)
+    resp = ResumeResponse.model_validate(resume)
+    resp.file_url = resume_service.get_effective_resume_file_url(resume)
+    return resp

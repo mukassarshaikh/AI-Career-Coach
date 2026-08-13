@@ -42,11 +42,9 @@ async def parse_resume(ctx: dict, resume_id: str) -> dict:
             logger.error(f"Resume {resume_id} not found in database.")
             raise RuntimeError(f"Resume {resume_id} not found in database.")
 
-        # 2. Extract text from Cloudinary file URL — let failures propagate as a
-        # real Arq job failure instead of silently substituting fake text, since
-        # a "successfully parsed" resume with fabricated content is worse than
-        # a visibly failed job the user can retry.
-        raw_text = await resume_service.extract_text_from_url(resume.file_url)
+        # 2. Extract text from Cloudinary file URL (uses fresh signed URL for authenticated resumes, legacy URL for legacy rows)
+        effective_url = resume_service.get_effective_resume_file_url(resume)
+        raw_text = await resume_service.extract_text_from_url(effective_url)
 
         # 3. Call Groq LLM to structure resume data into JSON — same principle:
         # let a genuine LLM failure fail the job rather than saving an empty

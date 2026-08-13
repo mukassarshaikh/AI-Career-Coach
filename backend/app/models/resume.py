@@ -17,6 +17,7 @@ class Resume(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
     file_url: Mapped[str] = mapped_column(Text, nullable=False)
+    cloudinary_public_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     raw_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     parsed_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     ats_score: Mapped[int | None] = mapped_column(Integer, nullable=True)

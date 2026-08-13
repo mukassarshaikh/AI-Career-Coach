@@ -151,6 +151,33 @@ def extract_text_from_bytes(file_bytes: bytes, filename: str) -> str:
     return "\n\n".join(text_chunks).strip()
 
 
+def get_signed_resume_url(public_id: str) -> str:
+    """
+    Generates a short-lived (~1 hour) signed delivery URL for an authenticated
+    Cloudinary raw resume asset using Cloudinary SDK conventions.
+    """
+    _configure_cloudinary()
+    url, _ = cloudinary.utils.cloudinary_url(
+        public_id,
+        resource_type="raw",
+        type="authenticated",
+        sign_url=True,
+        secure=True,
+    )
+    return url
+
+
+def get_effective_resume_file_url(resume: Resume) -> str:
+    """
+    Returns a valid delivery URL for the resume:
+    - If `cloudinary_public_id` is set (new authenticated uploads), generates a fresh signed URL.
+    - If `cloudinary_public_id` is None (legacy rows), falls back to stored `file_url`.
+    """
+    if resume.cloudinary_public_id:
+        return get_signed_resume_url(resume.cloudinary_public_id)
+    return resume.file_url
+
+
 async def extract_text_from_url(file_url: str) -> str:
     """
     Downloads file bytes from a Cloudinary URL and extracts raw text.
@@ -169,25 +196,32 @@ async def upload_resume_file(
     db: AsyncSession,
 ) -> Resume:
     """
-    Validates the file, uploads it to Cloudinary, and saves a `resumes` record in the database.
+    Validates the file, uploads it to Cloudinary as an authenticated private raw asset,
+    stores the permanent `cloudinary_public_id`, and saves a `resumes` record in the database.
     """
     # 1. Validate file extension and format (including binary magic bytes)
     await validate_resume_file(file)
 
-    # 2. Upload to Cloudinary
+    # 2. Upload to Cloudinary using authenticated delivery mode
     _configure_cloudinary()
     try:
         await file.seek(0)
         file_bytes = await file.read()
 
+        public_id_str = f"resumes/user_{user_id}_{file.filename}"
         upload_result = cloudinary.uploader.upload(
             file_bytes,
             resource_type="raw",
-            folder="resumes",
-            public_id=f"user_{user_id}_{file.filename}",
+            type="authenticated",
+            public_id=public_id_str,
             overwrite=True,
         )
-        file_url = upload_result.get("secure_url") or upload_result.get("url")
+        returned_public_id = upload_result.get("public_id") or public_id_str
+        file_url = (
+            upload_result.get("secure_url")
+            or upload_result.get("url")
+            or f"https://res.cloudinary.com/{settings.cloudinary_cloud_name}/raw/authenticated/{returned_public_id}"
+        )
         if not file_url:
             raise ValueError("Cloudinary response did not return a valid file URL.")
     except Exception as exc:
@@ -201,10 +235,11 @@ async def upload_resume_file(
             detail=f"Failed to upload resume file to Cloudinary: {str(exc)}",
         ) from exc
 
-    # 3. Create database row (raw_text, parsed_json, ats_score left null until parse_resume job runs)
+    # 3. Create database row with permanent cloudinary_public_id
     resume = Resume(
         user_id=user_id,
         file_url=file_url,
+        cloudinary_public_id=returned_public_id,
         raw_text=None,
         parsed_json=None,
         ats_score=None,
