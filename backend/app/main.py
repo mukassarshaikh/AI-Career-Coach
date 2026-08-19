@@ -32,6 +32,12 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+
+@app.get("/healthz")
+async def healthz() -> dict[str, str]:
+    """Production health check for platform deployment probes (e.g. Render)."""
+    return {"status": "ok"}
+
 # ---------------------------------------------------------------------------
 # Rate Limiter — slowapi
 # ---------------------------------------------------------------------------
