@@ -19,9 +19,9 @@ from app.models.skill import MarketSkillReference
 # 1. Dataset Verification
 # ---------------------------------------------------------------------------
 def test_starter_dataset_structure_and_coverage():
-    """Verify starter dataset covers 30 roles with valid demand weights and skills."""
+    """Verify starter dataset covers 31 roles with valid demand weights and skills."""
     unique_roles = {item["role_title"] for item in STARTER_MARKET_SKILLS}
-    assert len(unique_roles) == 30, f"Expected 30 unique roles, got {len(unique_roles)}"
+    assert len(unique_roles) == 31, f"Expected 31 unique roles, got {len(unique_roles)}"
 
     for item in STARTER_MARKET_SKILLS:
         assert "role_title" in item
