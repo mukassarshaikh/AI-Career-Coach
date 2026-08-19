@@ -100,6 +100,119 @@ async def test_compute_skill_gap_ranking_and_missing_skills():
 
 
 @pytest.mark.asyncio
+async def test_senior_react_developer_role_filtering_and_no_cross_role_contamination():
+    """Verify compute_user_skill_gap filters strictly by target role and prevents cross-role contamination."""
+    user_id = uuid.uuid4()
+    vector_id = uuid.uuid4()
+
+    mock_skill_vector = SkillVector(
+        id=vector_id,
+        user_id=user_id,
+        vector=[0.1] * 384,
+        raw_skills={"skills": ["React.js", "JavaScript", "HTML", "CSS", "Git"]},
+    )
+
+    react_market_refs = [
+        MarketSkillReference(role_title="Senior React Developer", skill_name="React", demand_weight=0.98),
+        MarketSkillReference(role_title="Senior React Developer", skill_name="TypeScript", demand_weight=0.95),
+        MarketSkillReference(role_title="Senior React Developer", skill_name="Next.js", demand_weight=0.88),
+        MarketSkillReference(role_title="Senior React Developer", skill_name="Frontend Architecture", demand_weight=0.85),
+    ]
+
+    mock_db = AsyncMock()
+    mock_db.add = MagicMock()
+
+    with patch("app.services.skill_service.get_skill_vector_by_user_id", AsyncMock(return_value=mock_skill_vector)), \
+         patch("app.services.skill_service.resolve_market_role", AsyncMock(return_value="Senior React Developer")):
+
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.all.return_value = react_market_refs
+        mock_db.execute = AsyncMock(return_value=mock_result)
+
+        report = await skill_service.compute_user_skill_gap(mock_db, user_id=user_id, target_role="Senior React Developer")
+
+        assert isinstance(report, SkillGapReport)
+        assert report.target_role == "Senior React Developer"
+        missing_names = [item["skill"] for item in report.missing_skills]
+
+        # React matched candidate's React.js alias -> should NOT be missing
+        assert "React" not in missing_names
+        # TypeScript, Next.js, Frontend Architecture should be present
+        assert "TypeScript" in missing_names
+        assert "Next.js" in missing_names
+        assert "Frontend Architecture" in missing_names
+
+        # Cross-role skills (Python, SQL, C++, AWS) MUST NOT be present
+        assert "Python" not in missing_names
+        assert "SQL" not in missing_names
+        assert "C / C++" not in missing_names
+        assert "AWS Architecture" not in missing_names
+
+
+@pytest.mark.asyncio
+async def test_duplicate_skill_normalization_in_market_refs():
+    """Verify market skill references with case/space variations are deduplicated."""
+    user_id = uuid.uuid4()
+    vector_id = uuid.uuid4()
+
+    mock_skill_vector = SkillVector(
+        id=vector_id,
+        user_id=user_id,
+        vector=[0.1] * 384,
+        raw_skills={"skills": []},
+    )
+
+    duplicate_refs = [
+        MarketSkillReference(role_title="Backend Engineer", skill_name="Python", demand_weight=0.95),
+        MarketSkillReference(role_title="Backend Engineer", skill_name="python", demand_weight=0.95),
+        MarketSkillReference(role_title="Backend Engineer", skill_name=" Python ", demand_weight=0.90),
+        MarketSkillReference(role_title="Backend Engineer", skill_name="PostgreSQL", demand_weight=0.88),
+    ]
+
+    mock_db = AsyncMock()
+    mock_db.add = MagicMock()
+
+    with patch("app.services.skill_service.get_skill_vector_by_user_id", AsyncMock(return_value=mock_skill_vector)), \
+         patch("app.services.skill_service.resolve_market_role", AsyncMock(return_value="Backend Engineer")):
+
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.all.return_value = duplicate_refs
+        mock_db.execute = AsyncMock(return_value=mock_result)
+
+        report = await skill_service.compute_user_skill_gap(mock_db, user_id=user_id, target_role="Backend Engineer")
+
+        missing_names = [item["skill"] for item in report.missing_skills]
+        # Python should appear exactly ONCE
+        python_occurrences = [name for name in missing_names if name.strip().lower() == "python"]
+        assert len(python_occurrences) == 1
+        assert len(report.missing_skills) == 2
+
+
+@pytest.mark.asyncio
+async def test_unmatched_role_raises_value_error_without_global_fallback():
+    """Verify target role with no market reference raises ValueError and does not fallback globally."""
+    user_id = uuid.uuid4()
+    vector_id = uuid.uuid4()
+
+    mock_skill_vector = SkillVector(
+        id=vector_id,
+        user_id=user_id,
+        vector=[0.1] * 384,
+        raw_skills={"skills": ["Python"]},
+    )
+
+    mock_db = AsyncMock()
+
+    with patch("app.services.skill_service.get_skill_vector_by_user_id", AsyncMock(return_value=mock_skill_vector)), \
+         patch("app.services.skill_service.resolve_market_role", AsyncMock(return_value=None)):
+
+        with pytest.raises(ValueError) as exc_info:
+            await skill_service.compute_user_skill_gap(mock_db, user_id=user_id, target_role="Nonexistent Role 999")
+
+        assert "No benchmark market reference data available" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
 async def test_compute_skill_gap_job_fails_when_no_skill_vector():
     """Verify compute_skill_gap job fails cleanly if candidate has no skill vector."""
     user_id = str(uuid.uuid4())

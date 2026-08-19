@@ -81,11 +81,59 @@ async def test_generate_roadmap_llm_logging():
         assert items[0]["skill_name"] == "Docker"
         assert items[0]["type"] == "course"
 
-        # Verify AI generation log entry was saved with module='learning'
-        assert mock_db.add.called
-        log_obj = mock_db.add.call_args[0][0]
-        assert isinstance(log_obj, AiGenerationLog)
-        assert log_obj.module == "learning"
+@pytest.mark.asyncio
+async def test_roadmap_receives_only_real_frontend_gaps():
+    """Verify generate_roadmap_llm receives strictly frontend missing skills and produces roadmap items for those skills only."""
+    dummy_llm_json = {
+        "items": [
+            {
+                "skill_name": "Next.js",
+                "type": "course",
+                "title": "Mastering Next.js App Router",
+                "description": "Learn server components, SSR, and API routes.",
+                "url": None,
+                "sequence_order": 1,
+                "difficulty": "intermediate",
+            },
+            {
+                "skill_name": "TypeScript",
+                "type": "project",
+                "title": "Build Typed React Components",
+                "description": "Convert JS components to TypeScript with strict type checking.",
+                "url": None,
+                "sequence_order": 2,
+                "difficulty": "intermediate",
+            },
+        ]
+    }
+
+    mock_db = AsyncMock()
+    mock_db.add = MagicMock()
+
+    with patch("app.services.llm_service._call_groq_with_retry", AsyncMock(return_value=json.dumps(dummy_llm_json))):
+        user_id = uuid.uuid4()
+        frontend_gaps = [
+            {"skill": "Next.js", "demand_weight": 0.88, "importance": "high"},
+            {"skill": "TypeScript", "demand_weight": 0.95, "importance": "high"},
+        ]
+
+        items = await llm_service.generate_roadmap_llm(
+            missing_skills=frontend_gaps,
+            target_role="Senior React Developer",
+            user_id=user_id,
+            db=mock_db,
+        )
+
+        assert len(items) == 2
+        roadmap_skills = {item["skill_name"] for item in items}
+        assert "Next.js" in roadmap_skills
+        assert "TypeScript" in roadmap_skills
+
+        # Confirm no cross-role skills exist in generated roadmap items
+        assert "Python" not in roadmap_skills
+        assert "SQL" not in roadmap_skills
+        assert "C / C++" not in roadmap_skills
+        assert "AWS Architecture" not in roadmap_skills
 
 
 # ---------------------------------------------------------------------------

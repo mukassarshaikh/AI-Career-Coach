@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Send } from "lucide-react";
+import Link from "next/link";
+import { History, RefreshCw, Send } from "lucide-react";
 import { sendMessage } from "@/lib/api/careerApi";
 import { useSessionHistory } from "@/lib/hooks/useCareer";
 import { ChatMessageBubble } from "./ChatMessageBubble";
@@ -10,9 +11,10 @@ import type { ChatContextType, ChatMessageResponse } from "@/types/career";
 interface ChatWindowProps {
   sessionId: string;
   contextType: ChatContextType;
+  onOpenHistory?: () => void;
 }
 
-export function ChatWindow({ sessionId, contextType }: ChatWindowProps) {
+export function ChatWindow({ sessionId, contextType, onOpenHistory }: ChatWindowProps) {
   const { data: historyData, isLoading: isHistoryLoading, refetch } = useSessionHistory(sessionId);
   const [messages, setMessages] = useState<ChatMessageResponse[]>([]);
   const [input, setInput] = useState("");
@@ -164,20 +166,48 @@ export function ChatWindow({ sessionId, contextType }: ChatWindowProps) {
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-12rem)] max-w-4xl mx-auto border border-line rounded-xl bg-paper-raised shadow-sm overflow-hidden">
-      {/* Chat Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-line bg-paper">
-        <div>
-          <span className="text-data text-ink-muted uppercase tracking-wider font-mono text-xs">
-            Active Session
-          </span>
-          <h2 className="text-body font-semibold text-ink">
-            {contextLabels[contextType]}
-          </h2>
+    <div className="flex flex-col h-full w-full border border-line rounded-xl bg-paper-raised shadow-sm overflow-hidden">
+      {/* Integrated Top Bar (Page Title, Subtitle, Context Badge, Actions) */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between px-6 py-4 border-b border-line bg-paper gap-4 shrink-0">
+        <div className="space-y-0.5">
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="font-serif text-display-sm font-normal text-ink">
+              Career Advisor
+            </h1>
+            <span className="px-2.5 py-0.5 rounded-full bg-forest/10 border border-forest/20 text-forest text-xs font-mono font-medium">
+              {contextLabels[contextType]}
+            </span>
+          </div>
+          <p className="text-body-sm text-ink-muted">
+            AI-powered career guidance, interview practice, and strategy advice tailored to your profile.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3 shrink-0">
+          {onOpenHistory && (
+            <button
+              type="button"
+              id="btn-history-drawer"
+              onClick={onOpenHistory}
+              className="flex items-center gap-2 border border-line bg-paper-raised text-ink px-3.5 py-2 rounded-md hover:bg-paper text-body-sm font-medium transition-colors shadow-2xs"
+            >
+              <History className="w-4 h-4 text-ink-muted" />
+              <span>History</span>
+            </button>
+          )}
+
+          <Link
+            id="btn-new-session"
+            href="/career"
+            className="flex items-center gap-2 border border-line bg-paper-raised text-ink px-3.5 py-2 rounded-md hover:bg-paper text-body-sm font-medium transition-colors shadow-2xs"
+          >
+            <RefreshCw className="w-4 h-4 text-ink-muted" />
+            <span>New session</span>
+          </Link>
         </div>
       </div>
 
-      {/* Message History List */}
+      {/* Message History List — Fills 100% available vertical space */}
       <div
         ref={chatContainerRef}
         className="flex-1 overflow-y-auto p-6 space-y-4 bg-paper/50"
@@ -189,12 +219,12 @@ export function ChatWindow({ sessionId, contextType }: ChatWindowProps) {
             </p>
           </div>
         ) : messages.length === 0 && !isStreaming ? (
-          <div className="text-center py-12">
+          <div className="text-center py-16">
             <p className="text-body text-ink font-medium mb-1">
               Conversation Started
             </p>
-            <p className="text-body-sm text-ink-muted">
-              Ask your Career Advisor anything to begin tailored guidance.
+            <p className="text-body-sm text-ink-muted max-w-md mx-auto">
+              Ask your Career Advisor anything to receive direct, evidence-based strategy and feedback.
             </p>
           </div>
         ) : (
@@ -224,8 +254,8 @@ export function ChatWindow({ sessionId, contextType }: ChatWindowProps) {
         )}
       </div>
 
-      {/* Input Area & Controls */}
-      <div className="p-4 border-t border-line bg-paper-raised">
+      {/* Input Area & Footer Disclaimer */}
+      <div className="p-4 border-t border-line bg-paper-raised shrink-0 space-y-2">
         <div className="flex gap-3 items-end">
           <textarea
             ref={textareaRef}
@@ -250,13 +280,21 @@ export function ChatWindow({ sessionId, contextType }: ChatWindowProps) {
           </button>
         </div>
 
-        {/* Subtle thinking indicator per design system §4 (no spinner overlay) */}
-        {isStreaming && (
-          <p className="text-body-sm text-ink-muted mt-2 font-sans">
-            Career Advisor is thinking...
-          </p>
-        )}
+        {/* Thinking Indicator & Disclaimer */}
+        <div className="flex items-center justify-between text-body-xs text-ink-muted font-sans pt-1">
+          {isStreaming ? (
+            <span className="text-teal font-mono animate-pulse">
+              Career Advisor is thinking...
+            </span>
+          ) : (
+            <span />
+          )}
+          <span className="truncate max-w-xl text-right">
+            Not a licensed counselor. Consult professionals for legal/visa/compensation decisions.
+          </span>
+        </div>
       </div>
     </div>
   );
 }
+

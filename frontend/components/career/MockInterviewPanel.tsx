@@ -131,7 +131,7 @@ export function MockInterviewPanel({ sessionId }: MockInterviewPanelProps) {
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-12rem)] max-w-4xl mx-auto border border-line rounded-xl bg-paper-raised shadow-sm overflow-hidden">
+    <div className="flex flex-col h-full w-full border border-line rounded-xl bg-paper-raised shadow-sm overflow-hidden">
       {/* Mock Interview Header */}
       <div className="px-6 py-4 border-b border-line bg-paper flex items-center justify-between">
         <div className="flex items-center gap-3">

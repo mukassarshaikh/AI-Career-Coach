@@ -21,6 +21,24 @@ STARTER_MARKET_SKILLS = [
     {"role_title": "Frontend Engineer", "skill_name": "REST API Integration", "demand_weight": 0.82},
     {"role_title": "Frontend Engineer", "skill_name": "Web Performance Optimization", "demand_weight": 0.75},
     {"role_title": "Frontend Engineer", "skill_name": "Jest / React Testing Library", "demand_weight": 0.70},
+    {"role_title": "Frontend Engineer", "skill_name": "Web Accessibility (WCAG / ARIA)", "demand_weight": 0.75},
+    {"role_title": "Frontend Engineer", "skill_name": "Frontend Architecture", "demand_weight": 0.80},
+    {"role_title": "Frontend Engineer", "skill_name": "Git / GitHub Workflows", "demand_weight": 0.85},
+
+    # 1b. Senior React Developer
+    {"role_title": "Senior React Developer", "skill_name": "React", "demand_weight": 0.98},
+    {"role_title": "Senior React Developer", "skill_name": "TypeScript", "demand_weight": 0.95},
+    {"role_title": "Senior React Developer", "skill_name": "JavaScript", "demand_weight": 0.92},
+    {"role_title": "Senior React Developer", "skill_name": "Next.js", "demand_weight": 0.88},
+    {"role_title": "Senior React Developer", "skill_name": "HTML5 / CSS3", "demand_weight": 0.85},
+    {"role_title": "Senior React Developer", "skill_name": "Tailwind CSS", "demand_weight": 0.80},
+    {"role_title": "Senior React Developer", "skill_name": "State Management (Redux/Zustand)", "demand_weight": 0.85},
+    {"role_title": "Senior React Developer", "skill_name": "REST API Integration", "demand_weight": 0.85},
+    {"role_title": "Senior React Developer", "skill_name": "Web Performance Optimization", "demand_weight": 0.82},
+    {"role_title": "Senior React Developer", "skill_name": "Jest / React Testing Library", "demand_weight": 0.78},
+    {"role_title": "Senior React Developer", "skill_name": "Web Accessibility (WCAG / ARIA)", "demand_weight": 0.75},
+    {"role_title": "Senior React Developer", "skill_name": "Frontend Architecture", "demand_weight": 0.85},
+    {"role_title": "Senior React Developer", "skill_name": "Git / GitHub Workflows", "demand_weight": 0.85},
 
     # 2. Backend Engineer
     {"role_title": "Backend Engineer", "skill_name": "Python", "demand_weight": 0.95},

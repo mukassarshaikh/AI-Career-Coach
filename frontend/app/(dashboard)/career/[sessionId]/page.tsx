@@ -62,45 +62,16 @@ export default function CareerSessionPage() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
-      {/* Header section */}
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-display-lg font-serif font-normal text-ink">
-            Career Advisor
-          </h1>
-          <p className="text-body text-ink-muted mt-1">
-            AI-powered career guidance, interview practice, and strategy advice tailored to your profile.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            id="btn-history-drawer"
-            onClick={() => setIsDrawerOpen(true)}
-            className="flex items-center gap-2 border border-line bg-paper-raised text-ink px-4 py-2 rounded-md hover:bg-paper text-body-sm font-medium transition-colors"
-          >
-            <History className="w-4 h-4 text-ink-muted" />
-            <span>History</span>
-          </button>
-
-          <Link
-            id="btn-new-session"
-            href="/career"
-            className="flex items-center gap-2 border border-line bg-paper-raised text-ink px-4 py-2 rounded-md hover:bg-paper text-body-sm font-medium transition-colors"
-          >
-            <RefreshCw className="w-4 h-4 text-ink-muted" />
-            <span>New session</span>
-          </Link>
-        </div>
-      </div>
-
+    <div className="w-full h-[calc(100vh-5.5rem)] flex flex-col">
       {/* Main Content Area — Session Chat or Mock Interview */}
       {contextType === "mock_interview" ? (
         <MockInterviewPanel sessionId={sessionId} />
       ) : (
-        <ChatWindow sessionId={sessionId} contextType={contextType} />
+        <ChatWindow
+          sessionId={sessionId}
+          contextType={contextType}
+          onOpenHistory={() => setIsDrawerOpen(true)}
+        />
       )}
 
       {/* History Slide-In Drawer */}
@@ -108,13 +79,7 @@ export default function CareerSessionPage() {
         isOpen={isDrawerOpen}
         onClose={() => setIsDrawerOpen(false)}
       />
-
-      {/* Legal & professional disclaimer */}
-      <div className="pt-2 text-center">
-        <p className="text-body-sm text-ink-muted max-w-2xl mx-auto leading-normal">
-          This advisor is not a licensed career counselor, lawyer, or financial advisor. For legal, visa, or compensation matters, consult a qualified professional.
-        </p>
-      </div>
     </div>
   );
 }
+

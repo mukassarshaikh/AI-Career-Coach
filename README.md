@@ -105,7 +105,6 @@ python -m app.workers.worker_settings
 # OR via Arq CLI module:
 python -m arq app.workers.worker_settings.WorkerSettings
 ```
-
 #### Running Backend Tests (Pytest via Python)
 ```bash
 # Run all tests

@@ -12,6 +12,7 @@ Handles:
 """
 
 import io
+import logging
 from typing import Optional
 from uuid import UUID
 
@@ -25,6 +26,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.models.resume import JobDescription, Resume, ResumeReport
 from app.services import llm_service
+
+logger = logging.getLogger(__name__)
 
 # Allowed file extensions and MIME types
 ALLOWED_EXTENSIONS = {".pdf", ".docx", ".doc"}
@@ -165,6 +168,76 @@ def get_signed_resume_url(public_id: str) -> str:
         secure=True,
     )
     return url
+
+
+def delete_cloudinary_asset(
+    public_id: str,
+    resource_type: str = "raw",
+    delivery_type: str = "authenticated",
+) -> dict:
+    """
+    Deletes a Cloudinary asset by public_id and delivery_type.
+    Distinguishes:
+      - successful deletion (result='ok') -> returns {"status": "ok", "result": "ok"}
+      - asset already absent (result='not found') -> returns {"status": "ok", "result": "not_found"}
+      - unconfigured/mock env -> returns {"status": "ok", "result": "mock_skipped"}
+      - genuine failure -> returns {"status": "failed", "error": "..."}
+    """
+    if not public_id:
+        return {"status": "ok", "result": "not_applicable"}
+
+    if not settings.cloudinary_cloud_name or "your_cloud_name" in settings.cloudinary_cloud_name:
+        logger.info(f"Cloudinary unconfigured/mock env; skipping physical destruction for '{public_id}'")
+        return {"status": "ok", "result": "mock_skipped"}
+
+    try:
+        _configure_cloudinary()
+        res = cloudinary.uploader.destroy(public_id, resource_type=resource_type, type=delivery_type)
+
+        res_str = str(res).lower()
+        result_val = res.get("result") if isinstance(res, dict) else str(res)
+        result_str = str(result_val).lower()
+
+        if result_str == "ok":
+            logger.info(f"Cloudinary destruction for '{public_id}' ({delivery_type}) succeeded: result='ok'")
+            return {"status": "ok", "result": "ok"}
+        elif "not found" in res_str or "404" in res_str or result_str in ("not found", "not_found"):
+            logger.info(f"Cloudinary destruction for '{public_id}' ({delivery_type}) returned not found ({res}); treating as already erased.")
+            return {"status": "ok", "result": "not found"}
+        else:
+            logger.error(f"Cloudinary destruction for '{public_id}' ({delivery_type}) failed: {res}")
+            return {"status": "failed", "error": f"Cloudinary response: {res}"}
+    except Exception as exc:
+        exc_str = str(exc).lower()
+        if "not found" in exc_str or "404" in exc_str:
+            logger.info(f"Cloudinary asset '{public_id}' ({delivery_type}) not found via exception ({exc}); treating as already erased.")
+            return {"status": "ok", "result": "not found"}
+        logger.error(f"Exception destroying Cloudinary asset '{public_id}': {exc}")
+        return {"status": "failed", "error": str(exc)}
+
+
+def extract_cloudinary_info_from_resume(resume: Resume) -> tuple[Optional[str], str]:
+    """
+    Extracts (public_id, delivery_type) for a resume record.
+    - If `cloudinary_public_id` is set (authenticated uploads), returns (cloudinary_public_id, "authenticated").
+    - If `cloudinary_public_id` is None (legacy uploads), parses `file_url` if it is a Cloudinary URL.
+    - Returns (None, "authenticated") if `file_url` is not a Cloudinary URL.
+    """
+    if resume.cloudinary_public_id:
+        return resume.cloudinary_public_id, "authenticated"
+
+    file_url = resume.file_url or ""
+    if "cloudinary.com" in file_url:
+        delivery_type = "authenticated" if "/raw/authenticated/" in file_url else "upload"
+        marker = "/raw/authenticated/" if "/raw/authenticated/" in file_url else "/raw/upload/"
+        if marker in file_url:
+            path_part = file_url.split(marker, 1)[1]
+            import re
+            clean_path = re.sub(r"^v\d+/", "", path_part)
+            public_id = clean_path.split("?")[0]
+            return public_id, delivery_type
+
+    return None, "authenticated"
 
 
 def get_effective_resume_file_url(resume: Resume) -> str:

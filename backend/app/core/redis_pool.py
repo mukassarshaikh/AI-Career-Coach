@@ -14,7 +14,10 @@ import logging
 from arq import ArqRedis, create_pool
 from arq.connections import RedisSettings
 
+from app.core.arq_patch import apply_arq_patch
 from app.core.config import settings
+
+apply_arq_patch()
 
 logger = logging.getLogger(__name__)
 

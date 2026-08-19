@@ -12,13 +12,19 @@ import logging
 from arq.connections import RedisSettings
 from arq.worker import run_worker
 
+from arq.cron import cron
+
+from app.core.arq_patch import apply_arq_patch
 from app.core.config import settings
+
+apply_arq_patch()
 from app.services import embedding_service
 from app.workers.jobs.analyze_keywords import analyze_keywords
 from app.workers.jobs.compute_skill_gap import compute_skill_gap
 from app.workers.jobs.generate_roadmap import generate_roadmap
 from app.workers.jobs.generate_skill_vector import generate_skill_vector
 from app.workers.jobs.parse_resume import parse_resume
+from app.workers.jobs.prune_ai_generation_logs import prune_ai_generation_logs
 from app.workers.jobs.recalculate_skill_vector import recalculate_skill_vector
 from app.workers.jobs.score_resume import score_resume
 
@@ -47,7 +53,7 @@ async def shutdown(ctx: dict):
 class WorkerSettings:
     """
     Arq WorkerSettings.
-    Registers all Phase 1 and Phase 2 job functions (`parse_resume`, `score_resume`, `analyze_keywords`, `generate_skill_vector`, `compute_skill_gap`, `generate_roadmap`, `recalculate_skill_vector`).
+    Registers all background job functions and cron schedules including Story 4.3 log retention.
     """
 
     functions = [
@@ -58,6 +64,11 @@ class WorkerSettings:
         compute_skill_gap,
         generate_roadmap,
         recalculate_skill_vector,
+        prune_ai_generation_logs,
+    ]
+
+    cron_jobs = [
+        cron(prune_ai_generation_logs, weekday=0, hour=3, minute=0),
     ]
 
     on_startup = startup

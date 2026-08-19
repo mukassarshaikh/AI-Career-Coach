@@ -16,7 +16,7 @@ class Settings(BaseSettings):
 
     # LLM
     groq_api_key: str = ""
-    groq_model: str = "llama-3.3-70b-versatile"
+    groq_model: str = "openai/gpt-oss-120b"
 
     # Cloudinary
     cloudinary_cloud_name: str = ""
@@ -27,13 +27,15 @@ class Settings(BaseSettings):
     nextauth_secret: str = "changeme"
 
     # Backend
-    backend_cors_origins: str = "http://localhost:3000"
+    backend_cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001"
 
     # Environment
     environment: str = "development"
 
     @property
     def cors_origins_list(self) -> list[str]:
-        return [o.strip() for o in self.backend_cors_origins.split(",")]
+        if not self.backend_cors_origins:
+            return ["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:3001", "http://127.0.0.1:3001"]
+        return [o.strip() for o in self.backend_cors_origins.split(",") if o.strip()]
 
 settings = Settings()
