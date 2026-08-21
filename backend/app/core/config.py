@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     groq_api_key: str = ""
     groq_model: str = "openai/gpt-oss-120b"
 
+    # Upstash QStash
+    qstash_url: str = ""
+    qstash_token: str = ""
+
     # Cloudinary
     cloudinary_cloud_name: str = ""
     cloudinary_api_key: str = ""
