@@ -31,22 +31,41 @@ from app.schemas.resume import (
     ScoreResumeResponse,
     SubmitJobDescriptionResponse,
 )
-from app.services import resume_service
+from app.services import qstash_service, resume_service
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/resume", tags=["resume"])
 
 
-async def _enqueue_parse_job(resume_id: UUID) -> str:
-    """Enqueue parse_resume via the shared Arq pool. Raises HTTPException(503)
-    if the queue is unavailable — never fabricates a job_id, since a fake ID
-    can never be enqueued and will silently never run."""
+async def _enqueue_parse_job(resume_id: UUID, request: Request | None = None) -> str:
+    """
+    Enqueues parse_resume via QStash when configured, falling back to Arq.
+    Raises HTTPException(503) if background processing is unavailable.
+    """
+    callback_base_url = str(request.base_url) if request else "http://localhost:8000"
+
+    # Attempt QStash publish if configured
+    try:
+        job_id = await qstash_service.publish_parse_resume_job(
+            resume_id=resume_id,
+            callback_base_url=callback_base_url,
+        )
+        if job_id:
+            return job_id
+    except Exception as exc:
+        logger.error(f"Failed QStash publish for resume_id={resume_id}: {exc}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Background processing queue is temporarily unavailable. Try again in a moment.",
+        ) from exc
+
+    # Fallback to Arq when QStash is not configured
     try:
         redis = get_redis_pool()
         job = await redis.enqueue_job("parse_resume", str(resume_id))
     except Exception as exc:
-        logger.error(f"Failed to enqueue parse_resume for resume_id={resume_id}: {exc}")
+        logger.error(f"Failed to enqueue parse_resume via Arq for resume_id={resume_id}: {exc}")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Background processing is temporarily unavailable. Try again in a moment.",
@@ -124,7 +143,7 @@ async def upload_resume(
         db=db,
     )
 
-    job_id = await _enqueue_parse_job(resume.id)
+    job_id = await _enqueue_parse_job(resume.id, request=request)
 
     return ResumeUploadResponse(
         resume_id=resume.id,
@@ -238,7 +257,7 @@ async def submit_job_description(
 
     return SubmitJobDescriptionResponse(
         job_description_id=jd.id,
-        resume_id=resume.id,
+        resume_id=resume_id,
         job_id=job_id,
         message="Job description submitted; keyword analysis enqueued.",
     )
@@ -286,15 +305,21 @@ async def get_job_status(
     current_user: User = Depends(get_current_user),
 ) -> JobStatusResponse:
     """
-    Queries Redis via Arq to return the background job's status for polling.
-    Never reports a status other than what Arq actually says. A job that
-    doesn't exist (not_found) or a Redis outage are both surfaced as
-    status='failed' with a clear message — they are NOT reported as
-    'complete', since that previously caused the frontend to display stale
-    or missing data as if processing had genuinely finished.
+    Queries Redis for job status polling. Checks QStash custom Redis key first,
+    then falls back to Arq job status.
     """
     try:
         redis = get_redis_pool()
+        status_key = f"job_status:{job_id}"
+        cached = await redis.get(status_key)
+        if cached:
+            import json
+            data = json.loads(cached.decode("utf-8") if isinstance(cached, bytes) else cached)
+            return JobStatusResponse(
+                job_id=job_id,
+                status=data.get("status", "failed"),
+                result=data.get("result"),
+            )
     except RuntimeError as exc:
         logger.error(f"Redis pool unavailable while checking job_id={job_id}: {exc}")
         return JobStatusResponse(
@@ -302,8 +327,11 @@ async def get_job_status(
             status="failed",
             result={"error": "Background job queue is unreachable. Check server logs and Redis connectivity."},
         )
+    except Exception as exc:
+        logger.warning(f"Error reading custom job status key for job_id={job_id}: {exc}")
 
     try:
+        redis = get_redis_pool()
         job = Job(job_id, redis)
         arq_status = await job.status()
         result = None

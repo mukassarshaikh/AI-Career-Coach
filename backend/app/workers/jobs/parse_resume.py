@@ -35,35 +35,4 @@ async def parse_resume(ctx: dict, resume_id: str) -> dict:
         raise RuntimeError("Arq context missing 'db_factory'")
 
     async with db_factory() as db:
-        # 1. Fetch resume row
-        uuid_obj = UUID(resume_id)
-        resume = await resume_service.get_resume_by_id(db, resume_id=uuid_obj)
-        if not resume:
-            logger.error(f"Resume {resume_id} not found in database.")
-            raise RuntimeError(f"Resume {resume_id} not found in database.")
-
-        # 2. Extract text from Cloudinary file URL (uses fresh signed URL for authenticated resumes, legacy URL for legacy rows)
-        effective_url = resume_service.get_effective_resume_file_url(resume)
-        raw_text = await resume_service.extract_text_from_url(effective_url)
-
-        # 3. Call Groq LLM to structure resume data into JSON — same principle:
-        # let a genuine LLM failure fail the job rather than saving an empty
-        # parsed_json that looks like a real (but empty) result to the user.
-        parsed_json = await llm_service.structure_resume(
-            text=raw_text,
-            user_id=resume.user_id,
-            db=db,
-        )
-
-        # 4. Save results to resumes table
-        resume.raw_text = raw_text
-        resume.parsed_json = parsed_json
-        await db.commit()
-
-        logger.info(f"Completed parse_resume job for resume_id={resume_id}")
-        return {
-            "status": "complete",
-            "resume_id": resume_id,
-            "raw_text_length": len(raw_text),
-            "parsed": True,
-        }
+        return await resume_service.process_parse_resume_job(db, UUID(resume_id))

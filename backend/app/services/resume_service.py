@@ -339,6 +339,50 @@ async def get_resume_by_id(
     return result.scalar_one_or_none()
 
 
+async def process_parse_resume_job(
+    db: AsyncSession,
+    resume_id: UUID,
+) -> dict:
+    """
+    Core shared business logic for parsing a resume record by ID:
+      1. Fetches the `resumes` row from Postgres by `resume_id`.
+      2. Downloads document from Cloudinary URL and extracts raw text.
+      3. Calls Groq LLM (`llm_service.structure_resume`) to structure raw text into JSON.
+      4. Logs the AI call to `ai_generation_logs` (module='resume').
+      5. Updates `resumes.raw_text` and `resumes.parsed_json` in Postgres.
+    """
+    logger.info(f"Starting process_parse_resume_job for resume_id={resume_id}")
+
+    resume = await get_resume_by_id(db, resume_id=resume_id)
+    if not resume:
+        logger.error(f"Resume {resume_id} not found in database.")
+        raise ValueError(f"Resume {resume_id} not found in database.")
+
+    # 1. Extract text from Cloudinary file URL
+    effective_url = get_effective_resume_file_url(resume)
+    raw_text = await extract_text_from_url(effective_url)
+
+    # 2. Call Groq LLM to structure resume data into JSON
+    parsed_json = await llm_service.structure_resume(
+        text=raw_text,
+        user_id=resume.user_id,
+        db=db,
+    )
+
+    # 3. Save results to resumes table
+    resume.raw_text = raw_text
+    resume.parsed_json = parsed_json
+    await db.commit()
+
+    logger.info(f"Completed process_parse_resume_job for resume_id={resume_id}")
+    return {
+        "status": "complete",
+        "resume_id": str(resume_id),
+        "raw_text_length": len(raw_text),
+        "parsed": True,
+    }
+
+
 async def list_user_resumes(
     db: AsyncSession,
     user_id: UUID,

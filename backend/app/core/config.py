@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     # Upstash QStash
     qstash_url: str = ""
     qstash_token: str = ""
+    qstash_current_signing_key: str = ""
+    qstash_next_signing_key: str = ""
 
     # Cloudinary
     cloudinary_cloud_name: str = ""
